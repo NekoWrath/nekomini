@@ -39,7 +39,7 @@ async def get_me(
         prof = StreamerProfile(
             id=1,
             name=settings.STREAMER_NAME,
-            avatar=settings.STREAMER_AVATAR,
+            avatar=settings.STREAMER_AVATAR if "unsplash" not in settings.STREAMER_AVATAR else "",
             twitch_url=settings.TWITCH_URL if "streamer" not in settings.TWITCH_URL else None,
             telegram_channel=settings.TELEGRAM_CHANNEL if "streamer_channel" not in settings.TELEGRAM_CHANNEL else None,
             donation_url="https://donatex.ru/",
@@ -48,6 +48,9 @@ async def get_me(
         db.add(prof)
         await db.commit()
         await db.refresh(prof)
+    elif prof.avatar and "unsplash" in prof.avatar:
+        prof.avatar = ""
+        await db.commit()
 
     return AuthMeResponse(
         telegram_id=current_user.telegram_id,

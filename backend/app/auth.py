@@ -86,7 +86,7 @@ async def get_current_user(
         username = "dev_streamer" if mock_role == "admin" else "dev_viewer"
         first_name = "Dev Admin" if mock_role == "admin" else "Dev Viewer"
         last_name = "User"
-        photo_url = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"
+        photo_url = None
     else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

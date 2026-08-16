@@ -6,30 +6,51 @@ from sqlalchemy import func
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models import User, Stream, Suggestion
+from app.models import User, Stream, Suggestion, StreamerProfile
 
 router = Router()
 
-def get_main_menu_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
+async def get_main_menu_keyboard(db):
+    prof_res = await db.execute(select(StreamerProfile).where(StreamerProfile.id == 1))
+    prof = prof_res.scalars().first()
+    
+    webapp_url = settings.WEBAPP_URL
+    if not webapp_url or "your-domain.com" in webapp_url:
+        webapp_url = "https://nekomini.onrender.com"
+
+    inline_keyboard = [
         [
             InlineKeyboardButton(
                 text="🚀 Открыть Mini App",
-                web_app=WebAppInfo(url=settings.WEBAPP_URL)
+                web_app=WebAppInfo(url=webapp_url)
             )
         ],
         [
             InlineKeyboardButton(text="📅 Расписание", callback_data="btn_schedule"),
             InlineKeyboardButton(text="💡 Предложка", callback_data="btn_suggest")
-        ],
-        [
-            InlineKeyboardButton(text="📺 Twitch", url=settings.TWITCH_URL),
-            InlineKeyboardButton(text="⚡️ Kick", url=settings.KICK_URL)
-        ],
-        [
-            InlineKeyboardButton(text="📢 Наш Канал", url=settings.TELEGRAM_CHANNEL)
         ]
-    ])
+    ]
+
+    social_row = []
+    if prof and prof.twitch_url:
+        social_row.append(InlineKeyboardButton(text="📺 Twitch", url=prof.twitch_url))
+    elif settings.TWITCH_URL and "streamer" not in settings.TWITCH_URL:
+        social_row.append(InlineKeyboardButton(text="📺 Twitch", url=settings.TWITCH_URL))
+
+    if prof and prof.telegram_channel:
+        social_row.append(InlineKeyboardButton(text="📢 Telegram", url=prof.telegram_channel))
+    elif settings.TELEGRAM_CHANNEL and "streamer_channel" not in settings.TELEGRAM_CHANNEL:
+        social_row.append(InlineKeyboardButton(text="📢 Telegram", url=settings.TELEGRAM_CHANNEL))
+
+    if social_row:
+        inline_keyboard.append(social_row)
+
+    if prof and prof.donation_url:
+        inline_keyboard.append([
+            InlineKeyboardButton(text=f"💰 {prof.donation_title or 'Поддержать на DonateX'}", url=prof.donation_url)
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
@@ -70,10 +91,20 @@ async def cmd_start(message: Message):
         f"Жми кнопку ниже, чтобы запустить Mini App 👇"
     )
 
+    async with AsyncSessionLocal() as db:
+        keyboard = await get_main_menu_keyboard(db)
+
     await message.answer(
         text=welcome_text,
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=keyboard
     )
+
+
+def get_clean_webapp_url() -> str:
+    url = settings.WEBAPP_URL
+    if not url or "your-domain.com" in url:
+        return "https://nekomini.onrender.com"
+    return url.rstrip("/")
 
 
 @router.message(Command("schedule"))
@@ -108,11 +139,12 @@ async def cmd_schedule(message: Message):
         else:
             text += "Пока нет запланированных стримов. Следите за анонсами!\n\n"
 
+    webapp_url = get_clean_webapp_url()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
                 text="📅 Открыть полное расписание",
-                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#schedule")
+                web_app=WebAppInfo(url=f"{webapp_url}#schedule")
             )
         ]
     ])
@@ -130,11 +162,12 @@ async def cmd_suggest(message: Message):
         "3. Выбери категорию и отправь свою идею!\n"
         "4. Голосуй за предложения других зрителей — топ попадает на стрим! 🔥"
     )
+    webapp_url = get_clean_webapp_url()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
                 text="💡 Перейти в Предложку",
-                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#suggestions")
+                web_app=WebAppInfo(url=f"{webapp_url}#suggestions")
             )
         ]
     ])
@@ -166,11 +199,12 @@ async def cmd_admin(message: Message):
         f"📅 <b>Всего стримов в базе:</b> {streams_count}\n\n"
         f"Управляйте расписанием и модерируйте предложку в Mini App 👇"
     )
+    webapp_url = get_clean_webapp_url()
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
                 text="🛡️ Открыть Админ-панель TMA",
-                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#admin")
+                web_app=WebAppInfo(url=f"{webapp_url}#admin")
             )
         ]
     ])

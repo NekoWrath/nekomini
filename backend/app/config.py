@@ -7,13 +7,10 @@ load_dotenv()
 
 class Settings(BaseSettings):
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
-    WEBAPP_URL: str = os.getenv("WEBAPP_URL", "https://your-domain.com")
+    WEBAPP_URL: str = os.getenv("WEBAPP_URL", os.getenv("RENDER_EXTERNAL_URL", "https://nekomini.onrender.com"))
     ADMIN_IDS_RAW: str = os.getenv("ADMIN_IDS", "123456789")
-    STREAMER_NAME: str = os.getenv("STREAMER_NAME", "StreamerLegend")
-    STREAMER_AVATAR: str = os.getenv(
-        "STREAMER_AVATAR",
-        "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80"
-    )
+    STREAMER_NAME: str = os.getenv("STREAMER_NAME", "NekoMini Streamer")
+    STREAMER_AVATAR: str = os.getenv("STREAMER_AVATAR", "")
     TWITCH_URL: str = os.getenv("TWITCH_URL", "https://twitch.tv/streamer")
     KICK_URL: str = os.getenv("KICK_URL", "https://kick.com/streamer")
     VK_URL: str = os.getenv("VK_URL", "https://live.vkvideo.ru/streamer")
