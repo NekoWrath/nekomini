@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: streamer-tma-backend
+    runtime: python
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python main.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: STREAMER_NAME
+        value: StreamerLegend
+      - key: DEBUG_MODE
+        value: "False"
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./tma_streamer.db
+      - key: API_PORT
+        value: 10000

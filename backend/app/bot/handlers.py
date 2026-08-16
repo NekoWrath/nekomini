@@ -1,0 +1,205 @@
+from aiogram import Router, F
+from aiogram.filters import CommandStart, Command
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from sqlalchemy.future import select
+from sqlalchemy import func
+
+from app.config import settings
+from app.database import AsyncSessionLocal
+from app.models import User, Stream, Suggestion
+
+router = Router()
+
+def get_main_menu_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🚀 Открыть Mini App",
+                web_app=WebAppInfo(url=settings.WEBAPP_URL)
+            )
+        ],
+        [
+            InlineKeyboardButton(text="📅 Расписание", callback_data="btn_schedule"),
+            InlineKeyboardButton(text="💡 Предложка", callback_data="btn_suggest")
+        ],
+        [
+            InlineKeyboardButton(text="📺 Twitch", url=settings.TWITCH_URL),
+            InlineKeyboardButton(text="⚡️ Kick", url=settings.KICK_URL)
+        ],
+        [
+            InlineKeyboardButton(text="📢 Наш Канал", url=settings.TELEGRAM_CHANNEL)
+        ]
+    ])
+
+@router.message(CommandStart())
+async def cmd_start(message: Message):
+    """Handles /start command, registers user in DB, sends welcome banner."""
+    tg_user = message.from_user
+    
+    # Save user to DB if not exists
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.telegram_id == tg_user.id))
+        user = result.scalars().first()
+        is_admin = tg_user.id in settings.admin_ids
+        role = "admin" if is_admin else "viewer"
+        
+        if not user:
+            user = User(
+                telegram_id=tg_user.id,
+                username=tg_user.username,
+                first_name=tg_user.first_name or "",
+                last_name=tg_user.last_name or "",
+                role=role
+            )
+            db.add(user)
+            await db.commit()
+        else:
+            if is_admin and user.role != "admin":
+                user.role = "admin"
+                await db.commit()
+
+    welcome_text = (
+        f"👋 Привет, <b>{tg_user.first_name}</b>!\n\n"
+        f"Добро пожаловать в официальное приложение стримера <b>{settings.STREAMER_NAME}</b>! 🎮✨\n\n"
+        f"Здесь ты можешь:\n"
+        f"📅 Смотреть актуальное <b>расписание стримов</b>\n"
+        f"⏰ Включать <b>напоминания</b> о трансляциях\n"
+        f"💡 Предлагать <b>игры, челленджи и вопросы</b> в «Предложку»\n"
+        f"👍 Голосовать за лучшие идеи других зрителей\n"
+        f"🔔 Получать уведомления о старте стримов и анонсах\n\n"
+        f"Жми кнопку ниже, чтобы запустить Mini App 👇"
+    )
+
+    await message.answer(
+        text=welcome_text,
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
+@router.message(Command("schedule"))
+async def cmd_schedule(message: Message):
+    """Sends schedule preview and button to open TMA."""
+    async with AsyncSessionLocal() as db:
+        # Check if live
+        live_result = await db.execute(select(Stream).where(Stream.is_live == True))
+        live_stream = live_result.scalars().first()
+
+        upcoming_result = await db.execute(
+            select(Stream)
+            .where(Stream.is_live == False, Stream.status == "scheduled")
+            .order_by(Stream.start_time.asc())
+            .limit(3)
+        )
+        upcoming_streams = upcoming_result.scalars().all()
+
+    if live_stream:
+        text = (
+            f"🔴 <b>СЕЙЧАС В ЭФИРЕ!</b>\n\n"
+            f"🎬 <b>{live_stream.title}</b>\n"
+            f"🎮 {live_stream.game_category} | 📡 {live_stream.platform}\n\n"
+            f"🔗 <a href='{live_stream.platform_url}'>Перейти на трансляцию</a>\n\n"
+        )
+    else:
+        text = "📅 <b>Ближайшие запланированные стримы:</b>\n\n"
+        if upcoming_streams:
+            for s in upcoming_streams:
+                dt_str = s.start_time.strftime("%d.%m в %H:%M")
+                text += f"▫️ <b>{s.title}</b>\n   🕒 {dt_str} | 🎮 {s.game_category} ({s.platform})\n\n"
+        else:
+            text += "Пока нет запланированных стримов. Следите за анонсами!\n\n"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="📅 Открыть полное расписание",
+                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#schedule")
+            )
+        ]
+    ])
+    await message.answer(text=text, reply_markup=keyboard)
+
+
+@router.message(Command("suggest"))
+async def cmd_suggest(message: Message):
+    """Instructions for suggestions."""
+    text = (
+        "💡 <b>Предложка и Вопросы для стримера</b>\n\n"
+        "Хочешь предложить крутую игру, челлендж или задать вопрос стримеру?\n\n"
+        "1. Открой Mini App по кнопке ниже\n"
+        "2. Перейди во вкладку «Предложка»\n"
+        "3. Выбери категорию и отправь свою идею!\n"
+        "4. Голосуй за предложения других зрителей — топ попадает на стрим! 🔥"
+    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="💡 Перейти в Предложку",
+                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#suggestions")
+            )
+        ]
+    ])
+    await message.answer(text=text, reply_markup=keyboard)
+
+
+@router.message(Command("admin"))
+async def cmd_admin(message: Message):
+    """Admin dashboard stats in Telegram."""
+    if message.from_user.id not in settings.admin_ids:
+        await message.answer("⛔️ У вас нет прав администратора.")
+        return
+
+    async with AsyncSessionLocal() as db:
+        users_count = await db.scalar(select(func.count(User.telegram_id)))
+        pending_count = await db.scalar(
+            select(func.count(Suggestion.id)).where(Suggestion.status == "pending")
+        )
+        streams_count = await db.scalar(select(func.count(Stream.id)))
+        live_stream = (await db.execute(select(Stream).where(Stream.is_live == True))).scalars().first()
+
+    live_status = f"🔴 В эфире ({live_stream.title})" if live_stream else "⚪️ Офлайн"
+
+    text = (
+        f"🛡️ <b>Панель управления стримера:</b>\n\n"
+        f"📊 <b>Статус:</b> {live_status}\n"
+        f"👥 <b>Подписчиков бота:</b> {users_count}\n"
+        f"⏳ <b>Идей на модерации:</b> {pending_count}\n"
+        f"📅 <b>Всего стримов в базе:</b> {streams_count}\n\n"
+        f"Управляйте расписанием и модерируйте предложку в Mini App 👇"
+    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🛡️ Открыть Админ-панель TMA",
+                web_app=WebAppInfo(url=f"{settings.WEBAPP_URL}#admin")
+            )
+        ]
+    ])
+    await message.answer(text=text, reply_markup=keyboard)
+
+
+@router.callback_query(F.data == "btn_schedule")
+async def cb_schedule(callback):
+    """Callback for inline schedule button."""
+    await callback.answer()
+    await cmd_schedule(callback.message)
+
+
+@router.callback_query(F.data == "btn_suggest")
+async def cb_suggest(callback):
+    """Callback for inline suggest button."""
+    await callback.answer()
+    await cmd_suggest(callback.message)
+
+
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    """Help message."""
+    text = (
+        "🤖 <b>Доступные команды:</b>\n\n"
+        "• /start — Главное меню и запуск Mini App\n"
+        "• /schedule — Расписание ближайших стримов\n"
+        "• /suggest — Как предложить идею или вопрос\n"
+        "• /admin — Панель стримера (только для админов)\n"
+        "• /help — Справка по боту"
+    )
+    await message.answer(text=text)

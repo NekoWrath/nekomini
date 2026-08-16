@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#090d16" />
+  <title>Streamer Telegram Mini App</title>
+
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: {
+              darkest: '#090d16',
+              darker: '#0d1322',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+          },
+          boxShadow: {
+            'glow-purple': '0 0 25px -5px rgba(139, 92, 246, 0.45)',
+            'glow-pink': '0 0 25px -5px rgba(236, 72, 153, 0.45)',
+            'glow-live': '0 0 30px rgba(239, 68, 68, 0.6)',
+            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+          },
+        }
+      }
+    }
+  </script>
+
+  <!-- React & Babel Standalone -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      background-color: #090d16;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(124, 58, 237, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(6, 182, 212, 0.08) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: #f1f5f9;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-panel-elevated {
+      background: rgba(22, 30, 52, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+    .glass-nav {
+      background: rgba(9, 13, 22, 0.92);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .btn-press:active {
+      transform: scale(0.96);
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen select-none overflow-x-hidden">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // Telegram API Helpers
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      try {
+        tg.ready();
+        tg.expand();
+        if (tg.setHeaderColor) tg.setHeaderColor('#090d16');
+        if (tg.setBackgroundColor) tg.setBackgroundColor('#090d16');
+      } catch (e) {}
+    }
+
+    const haptic = {
+      impact: (style = 'medium') => {
+        try { tg?.HapticFeedback?.impactOccurred(style); } catch(e){}
+      },
+      notify: (type = 'success') => {
+        try { tg?.HapticFeedback?.notificationOccurred(type); } catch(e){}
+      },
+      select: () => {
+        try { tg?.HapticFeedback?.selectionChanged(); } catch(e){}
+      }
+    };
+
+    function openLink(url) {
+      if (tg?.openLink) tg.openLink(url);
+      else window.open(url, '_blank');
+    }
+
+    function openTgLink(url) {
+      if (tg?.openTelegramLink) tg.openTelegramLink(url);
+      else window.open(url, '_blank');
+    }
+
+    const CATEGORIES = {
+      game_idea: { label: 'Идея для игры', emoji: '🎮', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30' },
+      question: { label: 'Вопрос стримеру', emoji: '❓', badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+      challenge: { label: 'Челлендж', emoji: '🔥', badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+      other: { label: 'Другое', emoji: '💬', badge: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+    };
+
+    const STATUSES = {
+      pending: { label: 'На рассмотрении', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', icon: '⏳' },
+      accepted: { label: 'Взято на стрим', badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', icon: '✅' },
+      rejected: { label: 'Отклонено', badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30', icon: '❌' },
+      answered: { label: 'Отвечено', badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30', icon: '💬' },
+    };
+
+    // Main App Component
+    function App() {
+      const isTg = Boolean(tg && tg.initData);
+      const [mockRole, setMockRole] = useState('viewer');
+      const [activeTab, setActiveTab] = useState('schedule');
+      
+      const [user, setUser] = useState(null);
+      const [streamer, setStreamer] = useState(null);
+      const [streams, setStreams] = useState([]);
+      const [currentStream, setCurrentStream] = useState(null);
+      const [suggestions, setSuggestions] = useState([]);
+      const [adminStats, setAdminStats] = useState(null);
+
+      const [sugTab, setSugTab] = useState('new');
+      const [sugCat, setSugCat] = useState('all');
+      const [sugSearch, setSugSearch] = useState('');
+      const [dayFilter, setDayFilter] = useState('all');
+
+      const [isSugModalOpen, setIsSugModalOpen] = useState(false);
+      const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
+      const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+      const [editingStream, setEditingStream] = useState(null);
+      const [moderatingSug, setModeratingSug] = useState(null);
+
+      const [toast, setToast] = useState(null);
+
+      const showToast = (text, type = 'info') => {
+        setToast({ text, type });
+        if (type === 'success') haptic.notify('success');
+        else if (type === 'error') haptic.notify('error');
+        else haptic.impact('light');
+        setTimeout(() => setToast(null), 3000);
+      };
+
+      const getHeaders = useCallback(() => {
+        const headers = { 'Content-Type': 'application/json' };
+        if (isTg && tg.initData) {
+          headers['X-Telegram-Init-Data'] = tg.initData;
+        } else {
+          headers['X-Mock-User-Id'] = mockRole === 'admin' ? '123456789' : '987654321';
+          headers['X-Mock-Role'] = mockRole;
+        }
+        return headers;
+      }, [isTg, mockRole]);
+
+      // Load Data
+      const loadAll = useCallback(async () => {
+        try {
+          const headers = getHeaders();
+          const meRes = await fetch('/api/auth/me', { headers });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            setUser(meData);
+            setStreamer(meData.streamer_info);
+          }
+
+          const [streamsRes, currRes, sugRes] = await Promise.all([
+            fetch('/api/schedule', { headers }),
+            fetch('/api/schedule/current', { headers }),
+            fetch(`/api/suggestions?tab=${sugTab}&category=${sugCat}&search=${encodeURIComponent(sugSearch)}`, { headers })
+          ]);
+
+          if (streamsRes.ok) setStreams(await streamsRes.json());
+          if (currRes.ok) setCurrentStream(await currRes.json());
+          if (sugRes.ok) setSuggestions(await sugRes.json());
+        } catch (e) {
+          console.warn('API fetch error:', e);
+        }
+      }, [getHeaders, sugTab, sugCat, sugSearch]);
+
+      useEffect(() => {
+        loadAll();
+      }, [loadAll]);
+
+      // Load Admin Stats if on admin tab
+      useEffect(() => {
+        if (activeTab === 'admin' && (user?.role === 'admin' || mockRole === 'admin')) {
+          fetch('/api/admin/stats', { headers: getHeaders() })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => d && setAdminStats(d));
+        }
+      }, [activeTab, user?.role, mockRole, getHeaders]);
+
+      // MainButton binding
+      useEffect(() => {
+        if (currentStream?.is_live && tg?.MainButton) {
+          tg.MainButton.setText(`🔥 СМОТРЕТЬ НА ${currentStream.platform.toUpperCase()}`);
+          tg.MainButton.setParams({ color: '#dc2626', text_color: '#ffffff' });
+          tg.MainButton.onClick(() => openLink(currentStream.platform_url));
+          tg.MainButton.show();
+        } else if (tg?.MainButton) {
+          tg.MainButton.hide();
+        }
+        return () => { try { tg?.MainButton?.hide(); } catch(e){} };
+      }, [currentStream]);
+
+      // Actions
+      const toggleReminder = async (streamId) => {
+        haptic.impact('medium');
+        try {
+          const res = await fetch(`/api/schedule/${streamId}/toggle-reminder`, {
+            method: 'POST',
+            headers: getHeaders(),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setStreams(prev => prev.map(s => s.id === streamId ? { ...s, has_reminder: data.has_reminder } : s));
+            if (currentStream?.id === streamId) setCurrentStream(p => ({ ...p, has_reminder: data.has_reminder }));
+            showToast(data.message, 'success');
+          }
+        } catch(e) { showToast('Ошибка напоминания', 'error'); }
+      };
+
+      const voteSug = async (sugId) => {
+        haptic.impact('medium');
+        try {
+          const res = await fetch(`/api/suggestions/${sugId}/vote`, {
+            method: 'POST',
+            headers: getHeaders(),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSuggestions(prev => prev.map(s => s.id === sugId ? { ...s, has_voted: data.has_voted, upvotes_count: data.upvotes_count } : s));
+          }
+        } catch(e) { showToast('Ошибка голосования', 'error'); }
+      };
+
+      const toggleLive = async (streamId, isLive) => {
+        haptic.impact('heavy');
+        try {
+          const res = await fetch(`/api/schedule/${streamId}/toggle-live?send_broadcast=${!isLive}`, {
+            method: 'POST',
+            headers: getHeaders(),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            showToast(data.is_live ? '🔴 Стрим запущен в эфир!' : '⚪️ Стрим завершен', 'success');
+            loadAll();
+          }
+        } catch(e) { showToast('Ошибка переключения эфира', 'error'); }
+      };
+
+      const isAdmin = user?.role === 'admin' || user?.role === 'moderator' || (!isTg && mockRole === 'admin');
+
+      const filteredStreams = streams.filter(s => {
+        if (dayFilter === 'all') return true;
+        const d = new Date(s.start_time).getDay();
+        return String(d) === dayFilter;
+      });
+
+      return (
+        <div className="max-w-md mx-auto min-h-screen pb-20 flex flex-col relative">
+          {/* Dev Mode Bar */}
+          {!isTg && (
+            <div className="bg-slate-900 border-b border-purple-500/30 px-3 py-1.5 text-xs flex items-center justify-between sticky top-0 z-50">
+              <span className="text-purple-300 font-medium">Тест в браузере:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setMockRole('viewer')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold ${mockRole === 'viewer' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                >
+                  Зритель
+                </button>
+                <button
+                  onClick={() => setMockRole('admin')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold ${mockRole === 'admin' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                >
+                  Стример (Админ)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Header */}
+          <header className="p-4 glass-panel border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <img
+                  src={streamer?.avatar || 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80'}
+                  className="w-10 h-10 rounded-full object-cover border-2 border-purple-500/50"
+                  alt="avatar"
+                />
+                {currentStream?.is_live ? (
+                  <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-rose-600 rounded-full border-2 border-slate-900 animate-pulse" />
+                ) : (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900" />
+                )}
+              </div>
+              <div>
+                <h1 className="font-display font-bold text-sm text-white">{streamer?.name || 'Streamer'}</h1>
+                <div className="text-[11px] mt-0.5">
+                  {currentStream?.is_live ? (
+                    <span className="text-rose-400 font-bold bg-rose-500/20 px-2 py-0.5 rounded-full">🔴 В ЭФИРЕ</span>
+                  ) : (
+                    <span className="text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">⚪️ Офлайн</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {user && (
+              <div className="bg-slate-800/80 border border-slate-700 px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5">
+                <span className="font-semibold text-slate-200">{user.first_name || 'Зритель'}</span>
+                {isAdmin && <span className="text-[9px] bg-rose-500/30 text-rose-300 font-bold px-1.5 py-0.5 rounded">ADMIN</span>}
+              </div>
+            )}
+          </header>
+
+          {/* MAIN TAB CONTENT */}
+          <main className="p-4 flex-1 space-y-4">
+            {/* TAB 1: SCHEDULE */}
+            {activeTab === 'schedule' && (
+              <div className="space-y-4">
+                {/* Hero Card */}
+                {currentStream && (
+                  <div className={`p-4 rounded-2xl relative overflow-hidden ${currentStream.is_live ? 'glass-panel-elevated border-rose-500/40' : 'glass-panel'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${currentStream.is_live ? 'bg-rose-600 text-white' : 'bg-purple-950 text-purple-300 border border-purple-500/40'}`}>
+                        {currentStream.is_live ? '🔴 ПРЯМОЙ ЭФИР' : '⏳ Следующий стрим'}
+                      </span>
+                      <span className="text-xs text-slate-300 font-bold bg-slate-800 px-2 py-0.5 rounded-md">
+                        {currentStream.platform}
+                      </span>
+                    </div>
+
+                    <h3 className="font-display font-bold text-base text-white">{currentStream.title}</h3>
+                    <div className="text-xs text-purple-300 mt-1">🎮 {currentStream.game_category}</div>
+
+                    <div className="mt-3">
+                      <button
+                        onClick={() => openLink(currentStream.platform_url)}
+                        className={`w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 ${currentStream.is_live ? 'bg-gradient-to-r from-rose-600 to-pink-600 text-white shadow-glow-live' : 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white'}`}
+                      >
+                        <span>▶️</span>
+                        <span>{currentStream.is_live ? 'Смотреть прямо сейчас' : 'Перейти на канал стримера'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Day Filter */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-white">📅 Расписание недели</span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => { setEditingStream(null); setIsStreamModalOpen(true); }}
+                        className="text-xs font-bold text-purple-300 bg-purple-950/60 border border-purple-500/30 px-2.5 py-1 rounded-xl"
+                      >
+                        + Добавить стрим
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar text-xs">
+                    {[
+                      { id: 'all', l: 'Все' },
+                      { id: '1', l: 'Пн' }, { id: '2', l: 'Вт' }, { id: '3', l: 'Ср' },
+                      { id: '4', l: 'Чт' }, { id: '5', l: 'Пт' }, { id: '6', l: 'Сб' }, { id: '0', l: 'Вс' }
+                    ].map(d => (
+                      <button
+                        key={d.id}
+                        onClick={() => setDayFilter(d.id)}
+                        className={`px-3 py-1 rounded-xl font-semibold whitespace-nowrap ${dayFilter === d.id ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400'}`}
+                      >
+                        {d.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stream Cards */}
+                <div className="space-y-3">
+                  {filteredStreams.map(s => (
+                    <div key={s.id} className="p-3.5 rounded-2xl glass-panel relative">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-purple-300 bg-purple-950/50 px-2 py-0.5 rounded border border-purple-500/30">
+                          {s.platform} • {s.game_category}
+                        </span>
+                        <button
+                          onClick={() => toggleReminder(s.id)}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${s.has_reminder ? 'bg-purple-600 text-white border-purple-400' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
+                        >
+                          {s.has_reminder ? '🔔 Включено' : '🔔 Напомнить'}
+                        </button>
+                      </div>
+
+                      <h4 className="font-display font-bold text-sm text-white mt-2">{s.title}</h4>
+                      {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
+
+                      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                        <span className="text-slate-400">🕒 {new Date(s.start_time).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                        <div className="flex items-center gap-1">
+                          {isAdmin && (
+                            <button
+                              onClick={() => toggleLive(s.id, s.is_live)}
+                              className={`p-1 px-2 rounded font-bold text-[11px] ${s.is_live ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}
+                            >
+                              {s.is_live ? '⏹ Стоп' : '🔴 В эфир'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openLink(s.platform_url)}
+                            className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-2.5 py-1 rounded-lg font-bold"
+                          >
+                            Смотреть
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: SUGGESTIONS */}
+            {activeTab === 'suggestions' && (
+              <div className="space-y-3">
+                <div className="p-3 rounded-2xl glass-panel-elevated flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display font-bold text-sm text-white">💡 Предложка и Вопросы</h3>
+                    <p className="text-xs text-slate-300">Предлагай темы и голосуй за топ!</p>
+                  </div>
+                  <button
+                    onClick={() => setIsSugModalOpen(true)}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs px-3 py-2 rounded-xl"
+                  >
+                    + Предложить
+                  </button>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-900 rounded-xl text-xs">
+                  {['new', 'popular', 'answered', 'my'].map(tabKey => (
+                    <button
+                      key={tabKey}
+                      onClick={() => setSugTab(tabKey)}
+                      className={`py-1 rounded-lg font-semibold capitalize ${sugTab === tabKey ? 'bg-purple-600 text-white' : 'text-slate-400'}`}
+                    >
+                      {tabKey === 'new' ? 'Новые' : tabKey === 'popular' ? 'Топ' : tabKey === 'answered' ? 'Ответы' : 'Мои'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Suggestions List */}
+                <div className="space-y-3">
+                  {suggestions.map(sug => {
+                    const cat = CATEGORIES[sug.category] || CATEGORIES.other;
+                    const st = STATUSES[sug.status] || STATUSES.pending;
+                    return (
+                      <div key={sug.id} className="p-3.5 rounded-2xl glass-panel space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-200">{sug.author_name}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${cat.badge}`}>
+                            {cat.emoji} {cat.label}
+                          </span>
+                        </div>
+
+                        <h4 className="font-display font-bold text-sm text-white">{sug.title}</h4>
+                        <p className="text-xs text-slate-300">{sug.content}</p>
+
+                        {sug.admin_reply && (
+                          <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs italic text-slate-200">
+                            <span className="font-bold text-purple-400 block not-italic mb-0.5">💬 Ответ стримера:</span>
+                            «{sug.admin_reply}»
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${st.badge}`}>
+                            {st.icon} {st.label}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {isAdmin && (
+                              <button
+                                onClick={() => setModeratingSug(sug)}
+                                className="bg-slate-800 text-purple-300 border border-purple-500/30 px-2 py-1 rounded text-xs font-semibold"
+                              >
+                                Модерация
+                              </button>
+                            )}
+                            <button
+                              onClick={() => voteSug(sug.id)}
+                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${sug.has_voted ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                            >
+                              <span>🔥</span>
+                              <span>{sug.upvotes_count}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: SETTINGS */}
+            {activeTab === 'settings' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl glass-panel-elevated">
+                  <h3 className="font-display font-bold text-base text-white">{user?.first_name} {user?.last_name || ''}</h3>
+                  <div className="text-xs text-purple-300">@{user?.username || 'user'} • ID: {user?.telegram_id}</div>
+                </div>
+
+                <div className="p-4 rounded-2xl glass-panel space-y-3 text-xs">
+                  <h4 className="font-bold text-white mb-1">🔔 Уведомления бота</h4>
+                  {[
+                    { k: 'notify_stream_start', l: 'Старт трансляций (в эфире)' },
+                    { k: 'notify_announcements', l: 'Важные анонсы и новости' },
+                    { k: 'notify_answers', l: 'Ответы на мои идеи в предложке' },
+                  ].map(item => (
+                    <div key={item.k} className="flex items-center justify-between py-1">
+                      <span>{item.l}</span>
+                      <button
+                        onClick={async () => {
+                          const updated = !user[item.k];
+                          setUser(p => ({ ...p, [item.k]: updated }));
+                          await fetch('/api/settings', {
+                            method: 'PUT',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ [item.k]: updated })
+                          });
+                          showToast('Настройки сохранены', 'success');
+                        }}
+                        className={`w-10 h-5 rounded-full transition-colors relative ${user?.[item.k] ? 'bg-purple-600' : 'bg-slate-800'}`}
+                      >
+                        <span className={`inline-block w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 transition-transform ${user?.[item.k] ? 'right-1' : 'left-1'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Socials */}
+                <div className="p-4 rounded-2xl glass-panel space-y-2">
+                  <h4 className="font-bold text-xs text-white">📺 Каналы стримера</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                    <button onClick={() => openLink(streamer?.twitch_url)} className="p-2 rounded-xl bg-purple-900/30 text-purple-300 border border-purple-500/30 text-left">
+                      📺 Twitch
+                    </button>
+                    <button onClick={() => openLink(streamer?.kick_url)} className="p-2 rounded-xl bg-emerald-900/30 text-emerald-300 border border-emerald-500/30 text-left">
+                      ⚡️ Kick
+                    </button>
+                    <button onClick={() => openLink(streamer?.vk_url)} className="p-2 rounded-xl bg-blue-900/30 text-blue-300 border border-blue-500/30 text-left">
+                      🎬 VK Видео
+                    </button>
+                    <button onClick={() => openTgLink(streamer?.telegram_channel)} className="p-2 rounded-xl bg-cyan-900/30 text-cyan-300 border border-cyan-500/30 text-left">
+                      📢 Telegram
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: ADMIN */}
+            {activeTab === 'admin' && isAdmin && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border border-purple-500/40">
+                  <h3 className="font-display font-bold text-base text-white mb-2">🛡️ Панель Стримера</h3>
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    <div className="bg-slate-950/70 p-2 rounded-xl"><div className="text-slate-400">Зрители</div><div className="font-bold text-white text-sm">{adminStats?.users_count || 0}</div></div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl"><div className="text-slate-400">Идеи</div><div className="font-bold text-amber-400 text-sm">{adminStats?.pending_suggestions || 0}</div></div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl"><div className="text-slate-400">Стримы</div><div className="font-bold text-white text-sm">{adminStats?.total_streams || 0}</div></div>
+                    <div className="bg-slate-950/70 p-2 rounded-xl"><div className="text-slate-400">Голоса</div><div className="font-bold text-rose-400 text-sm">{adminStats?.total_votes || 0}</div></div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => { setEditingStream(null); setIsStreamModalOpen(true); }}
+                    className="p-3 rounded-xl bg-purple-600 text-white font-bold text-xs flex items-center justify-center gap-1"
+                  >
+                    + Добавить стрим
+                  </button>
+                  <button
+                    onClick={() => setIsBroadcastModalOpen(true)}
+                    className="p-3 rounded-xl bg-rose-600 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-glow-live"
+                  >
+                    📢 Рассылка анонса
+                  </button>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* BOTTOM NAV */}
+          <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto glass-nav border-t border-white/10 p-2 flex justify-around z-40">
+            {[
+              { id: 'schedule', l: 'Расписание', icon: '📅' },
+              { id: 'suggestions', l: 'Предложка', icon: '💡' },
+              { id: 'settings', l: 'Настройки', icon: '🔔' },
+              ...(isAdmin ? [{ id: 'admin', l: 'Админка', icon: '🛡️' }] : []),
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => { haptic.select(); setActiveTab(t.id); }}
+                className={`flex flex-col items-center justify-center flex-1 py-1 rounded-xl text-xs font-semibold btn-press ${activeTab === t.id ? 'text-purple-400' : 'text-slate-400'}`}
+              >
+                <span className="text-base">{t.icon}</span>
+                <span className="text-[10px] mt-0.5">{t.l}</span>
+              </button>
+            ))}
+          </nav>
+
+          {/* TOAST */}
+          {toast && (
+            <div className="fixed top-12 left-4 right-4 max-w-xs mx-auto z-50 p-3 rounded-2xl bg-slate-900/95 border border-purple-500 text-xs font-semibold text-center text-white shadow-glass animate-bounce">
+              {toast.text}
+            </div>
+          )}
+
+          {/* SUBMIT SUGGESTION MODAL */}
+          {isSugModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">💡 Предложить идею</h3>
+                  <button onClick={() => setIsSugModalOpen(false)} className="text-slate-400">✕</button>
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const data = {
+                    category: form.cat.value,
+                    title: form.title.value,
+                    content: form.content.value
+                  };
+                  const res = await fetch('/api/suggestions', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(data)
+                  });
+                  if (res.ok) {
+                    showToast('Идея отправлена!', 'success');
+                    setIsSugModalOpen(false);
+                    loadAll();
+                  }
+                }} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Категория</label>
+                    <select name="cat" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white">
+                      <option value="game_idea">🎮 Идея для игры</option>
+                      <option value="question">❓ Вопрос стримеру</option>
+                      <option value="challenge">🔥 Челлендж</option>
+                      <option value="other">💬 Другое</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Заголовок</label>
+                    <input name="title" required placeholder="Например: Пройти Outlast без смертей" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Описание</label>
+                    <textarea name="content" required rows="3" placeholder="Подробно опишите идею..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white resize-none" />
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl">
+                    Отправить в предложку
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ADMIN MODERATE MODAL */}
+          {moderatingSug && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">🛡️ Модерация</h3>
+                  <button onClick={() => setModeratingSug(null)} className="text-slate-400">✕</button>
+                </div>
+                <div className="p-2 bg-slate-950 rounded-xl text-xs">
+                  <div className="font-bold text-white">{moderatingSug.title}</div>
+                  <div className="text-slate-400 mt-0.5">{moderatingSug.content}</div>
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const res = await fetch(`/api/suggestions/${moderatingSug.id}/moderate`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ status: form.status.value, admin_reply: form.reply.value })
+                  });
+                  if (res.ok) {
+                    showToast('Статус обновлен, автор уведомлен!', 'success');
+                    setModeratingSug(null);
+                    loadAll();
+                  }
+                }} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Решение</label>
+                    <select name="status" defaultValue="accepted" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white">
+                      <option value="accepted">✅ Взять на стрим</option>
+                      <option value="answered">💬 Ответить</option>
+                      <option value="rejected">❌ Отклонить</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Ответ (уйдет автору в ЛС через бота):</label>
+                    <textarea name="reply" rows="2" placeholder="Ответ стримера..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white resize-none" />
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-purple-600 text-white font-bold rounded-xl">
+                    Сохранить и отправить пуш
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE STREAM MODAL */}
+          {isStreamModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">+ Добавить стрим</h3>
+                  <button onClick={() => setIsStreamModalOpen(false)} className="text-slate-400">✕</button>
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const data = {
+                    title: form.title.value,
+                    description: form.desc.value,
+                    game_category: form.cat.value,
+                    platform: form.plat.value,
+                    platform_url: form.url.value,
+                    start_time: new Date(form.dt.value).toISOString(),
+                  };
+                  const res = await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(data)
+                  });
+                  if (res.ok) {
+                    showToast('Стрим добавлен в расписание!', 'success');
+                    setIsStreamModalOpen(false);
+                    loadAll();
+                  }
+                }} className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Название стрима</label>
+                    <input name="title" required placeholder="Например: Финал турнира CS2" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 mb-1">Категория / Игра</label>
+                    <input name="cat" defaultValue="Just Chatting" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Платформа</label>
+                      <select name="plat" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white">
+                        <option value="Twitch">Twitch</option>
+                        <option value="Kick">Kick</option>
+                        <option value="VK Video">VK Video</option>
+                        <option value="YouTube">YouTube</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1">Дата и время</label>
+                      <input name="dt" type="datetime-local" required defaultValue={new Date(Date.now() + 3600000 * 3).toISOString().slice(0, 16)} className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 mb-1">Ссылка на трансляцию</label>
+                    <input name="url" required defaultValue="https://twitch.tv/streamer" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 mb-1">Описание</label>
+                    <input name="desc" placeholder="Краткое описание" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-purple-600 text-white font-bold rounded-xl mt-2">
+                    Сохранить
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* BROADCAST MODAL */}
+          {isBroadcastModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">📢 Мгновенный анонс</h3>
+                  <button onClick={() => setIsBroadcastModalOpen(false)} className="text-slate-400">✕</button>
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const res = await fetch('/api/admin/broadcast', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                      title: form.title.value,
+                      content: form.content.value,
+                      button_text: form.btext.value || null,
+                      button_url: form.burl.value || null,
+                    })
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    showToast(data.message, 'success');
+                    setIsBroadcastModalOpen(false);
+                  }
+                }} className="space-y-2 text-xs">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Заголовок анонса</label>
+                    <input name="title" required placeholder="🚨 СРОЧНЫЙ СТРИМ через 10 минут!" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 mb-1">Текст сообщения</label>
+                    <textarea name="content" required rows="3" placeholder="Подробности анонса..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white resize-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Текст кнопки</label>
+                      <input name="btext" defaultValue="🔥 Смотреть трансляцию" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1">Ссылка кнопки</label>
+                      <input name="burl" defaultValue="https://twitch.tv/streamer" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-rose-600 text-white font-bold rounded-xl shadow-glow-live mt-2">
+                    Запустить рассылку ботом
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

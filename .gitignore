@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+backend/venv/
+backend/data/
+
+# Secrets & Local Config (do not expose private tokens on public GitHub!)
+.env
+backend/.env
+*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+tma_streamer.db
+backend/tma_streamer.db
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
