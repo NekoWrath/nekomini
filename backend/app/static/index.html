@@ -160,6 +160,7 @@
       const [isSugModalOpen, setIsSugModalOpen] = useState(false);
       const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
       const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+      const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
       const [editingStream, setEditingStream] = useState(null);
       const [moderatingSug, setModeratingSug] = useState(null);
 
@@ -573,6 +574,26 @@
                   <div className="text-xs text-purple-300">@{user?.username || 'user'} • ID: {user?.telegram_id}</div>
                 </div>
 
+                {/* Donation Card (DonateX) */}
+                {streamer?.donation_url && (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-purple-500/20 border border-amber-500/40 text-center space-y-2">
+                    <div className="text-xs font-extrabold text-amber-300 flex items-center justify-center gap-1.5">
+                      <span>💰</span>
+                      <span>ПОДДЕРЖКА СТРИМЕРА</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Отправить донат и сообщение на стрим через DonateX:
+                    </p>
+                    <button
+                      onClick={() => openLink(streamer.donation_url)}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 hover:brightness-110 text-white font-display font-extrabold text-xs shadow-lg transition-all btn-press flex items-center justify-center gap-1.5"
+                    >
+                      <span>💸</span>
+                      <span>{streamer.donation_title || 'Поддержать на DonateX'}</span>
+                    </button>
+                  </div>
+                )}
+
                 <div className="p-4 rounded-2xl glass-panel space-y-3 text-xs">
                   <h4 className="font-bold text-white mb-1">🔔 Уведомления бота</h4>
                   {[
@@ -601,24 +622,37 @@
                   ))}
                 </div>
 
-                {/* Socials */}
-                <div className="p-4 rounded-2xl glass-panel space-y-2">
-                  <h4 className="font-bold text-xs text-white">📺 Каналы стримера</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                    <button onClick={() => openLink(streamer?.twitch_url)} className="p-2 rounded-xl bg-purple-900/30 text-purple-300 border border-purple-500/30 text-left">
-                      📺 Twitch
-                    </button>
-                    <button onClick={() => openLink(streamer?.kick_url)} className="p-2 rounded-xl bg-emerald-900/30 text-emerald-300 border border-emerald-500/30 text-left">
-                      ⚡️ Kick
-                    </button>
-                    <button onClick={() => openLink(streamer?.vk_url)} className="p-2 rounded-xl bg-blue-900/30 text-blue-300 border border-blue-500/30 text-left">
-                      🎬 VK Видео
-                    </button>
-                    <button onClick={() => openTgLink(streamer?.telegram_channel)} className="p-2 rounded-xl bg-cyan-900/30 text-cyan-300 border border-cyan-500/30 text-left">
-                      📢 Telegram
-                    </button>
-                  </div>
-                </div>
+                {/* Socials - Only show those with non-empty URL! */}
+                {(() => {
+                  const socials = [
+                    { k: 'twitch_url', l: '📺 Twitch', bg: 'bg-purple-900/30 text-purple-300 border-purple-500/30' },
+                    { k: 'telegram_channel', l: '📢 Telegram', bg: 'bg-cyan-900/30 text-cyan-300 border-cyan-500/30', isTg: true },
+                    { k: 'youtube_url', l: '▶️ YouTube', bg: 'bg-rose-900/30 text-rose-300 border-rose-500/30' },
+                    { k: 'discord_url', l: '💬 Discord', bg: 'bg-indigo-900/30 text-indigo-300 border-indigo-500/30' },
+                    { k: 'kick_url', l: '⚡️ Kick', bg: 'bg-emerald-900/30 text-emerald-300 border-emerald-500/30' },
+                    { k: 'vk_url', l: '🎬 VK Видео', bg: 'bg-blue-900/30 text-blue-300 border-blue-500/30' },
+                  ].filter(s => streamer?.[s.k] && streamer[s.k].trim() !== '');
+
+                  if (socials.length === 0) return null;
+
+                  return (
+                    <div className="p-4 rounded-2xl glass-panel space-y-2">
+                      <h4 className="font-bold text-xs text-white">🔗 Каналы и Соцсети</h4>
+                      <div className="grid grid-cols-2 gap-2 text-xs font-bold">
+                        {socials.map(s => (
+                          <button
+                            key={s.k}
+                            onClick={() => s.isTg ? openTgLink(streamer[s.k]) : openLink(streamer[s.k])}
+                            className={`p-2.5 rounded-xl border text-left transition-all btn-press flex items-center justify-between ${s.bg}`}
+                          >
+                            <span>{s.l}</span>
+                            <span className="text-[10px] opacity-70">↗</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -635,18 +669,27 @@
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => { setEditingStream(null); setIsStreamModalOpen(true); }}
-                    className="p-3 rounded-xl bg-purple-600 text-white font-bold text-xs flex items-center justify-center gap-1"
+                    className="p-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 btn-press"
                   >
-                    + Добавить стрим
+                    <span>📅</span>
+                    <span>+ Стрим</span>
+                  </button>
+                  <button
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="p-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 btn-press"
+                  >
+                    <span>⚙️</span>
+                    <span>Соцсети & Донат</span>
                   </button>
                   <button
                     onClick={() => setIsBroadcastModalOpen(true)}
-                    className="p-3 rounded-xl bg-rose-600 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-glow-live"
+                    className="p-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-glow-live btn-press"
                   >
-                    📢 Рассылка анонса
+                    <span>📢</span>
+                    <span>Рассылка</span>
                   </button>
                 </div>
               </div>
@@ -893,6 +936,120 @@
                   </div>
                   <button type="submit" className="w-full py-2.5 bg-rose-600 text-white font-bold rounded-xl shadow-glow-live mt-2">
                     Запустить рассылку ботом
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* STREAMER PROFILE & LINKS SETTINGS MODAL */}
+          {isProfileModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border border-indigo-500/40 rounded-3xl p-5 w-full max-w-md space-y-3 my-auto max-h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between items-center sticky top-0 bg-slate-900 pt-1 pb-2 border-b border-white/5 z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">⚙️</span>
+                    <h3 className="font-bold text-white text-base">Настройки профиля и ссылок</h3>
+                  </div>
+                  <button onClick={() => setIsProfileModalOpen(false)} className="text-slate-400 text-sm p-1">✕</button>
+                </div>
+
+                <p className="text-[11px] text-slate-400">
+                  Укажите ваши ссылки. Пустые поля автоматически скроются из приложения для зрителей.
+                </p>
+
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const payload = {
+                    name: form.name.value.trim() || 'Streamer',
+                    avatar: form.avatar.value.trim() || 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80',
+                    twitch_url: form.twitch_url.value.trim() || null,
+                    telegram_channel: form.telegram_channel.value.trim() || null,
+                    youtube_url: form.youtube_url.value.trim() || null,
+                    discord_url: form.discord_url.value.trim() || null,
+                    kick_url: form.kick_url.value.trim() || null,
+                    vk_url: form.vk_url.value.trim() || null,
+                    donation_url: form.donation_url.value.trim() || null,
+                    donation_title: form.donation_title.value.trim() || 'Поддержать на DonateX',
+                  };
+
+                  const res = await fetch('/api/admin/profile', {
+                    method: 'PUT',
+                    headers: getHeaders(),
+                    body: JSON.stringify(payload)
+                  });
+
+                  if (res.ok) {
+                    showToast('Настройки стримера и ссылки сохранены!', 'success');
+                    setIsProfileModalOpen(false);
+                    loadAll();
+                  } else {
+                    showToast('Ошибка сохранения профиля', 'error');
+                  }
+                }} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Никнейм стримера</label>
+                    <input name="name" defaultValue={streamer?.name || ''} placeholder="Например: NekoWrath" required className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">URL Аватара (картинка)</label>
+                    <input name="avatar" defaultValue={streamer?.avatar || ''} placeholder="https://..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="text-amber-400 font-bold mb-2 flex items-center gap-1">
+                      <span>💰</span>
+                      <span>Донаты (DonateX):</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">Ссылка на страницу DonateX</label>
+                        <input name="donation_url" defaultValue={streamer?.donation_url || ''} placeholder="https://donatex.ru/c/your_link" className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">Текст на кнопке доната</label>
+                        <input name="donation_title" defaultValue={streamer?.donation_title || 'Поддержать на DonateX'} placeholder="Поддержать на DonateX" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10">
+                    <div className="text-purple-300 font-bold mb-2 flex items-center gap-1">
+                      <span>🔗</span>
+                      <span>Социальные сети и каналы:</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">📺 Twitch канал</label>
+                        <input name="twitch_url" defaultValue={streamer?.twitch_url || ''} placeholder="https://twitch.tv/..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">📢 Telegram канал / чат</label>
+                        <input name="telegram_channel" defaultValue={streamer?.telegram_channel || ''} placeholder="https://t.me/..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">▶️ YouTube канал</label>
+                        <input name="youtube_url" defaultValue={streamer?.youtube_url || ''} placeholder="https://youtube.com/@..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">💬 Discord сервер</label>
+                        <input name="discord_url" defaultValue={streamer?.discord_url || ''} placeholder="https://discord.gg/..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">⚡️ Kick (оставьте пустым, если нет)</label>
+                        <input name="kick_url" defaultValue={streamer?.kick_url || ''} placeholder="https://kick.com/..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 mb-0.5">🎬 VK Видео (оставьте пустым, если нет)</label>
+                        <input name="vk_url" defaultValue={streamer?.vk_url || ''} placeholder="https://live.vkvideo.ru/..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:brightness-110 text-white font-bold rounded-xl shadow-lg mt-3 text-xs btn-press">
+                    💾 Сохранить настройки профиля
                   </button>
                 </form>
               </div>

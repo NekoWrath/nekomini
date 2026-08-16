@@ -118,3 +118,25 @@ class Announcement(Base):
     button_url = Column(String(1024), nullable=True)
     sent_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class StreamerProfile(Base):
+    __tablename__ = "streamer_profile"
+
+    id = Column(Integer, primary_key=True, default=1)
+    name = Column(String(255), default="StreamerLegend")
+    avatar = Column(String(1024), default="https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80")
+    bio = Column(Text, default="")
+    
+    twitch_url = Column(String(1024), nullable=True)
+    telegram_channel = Column(String(1024), nullable=True)
+    youtube_url = Column(String(1024), nullable=True)
+    kick_url = Column(String(1024), nullable=True)
+    vk_url = Column(String(1024), nullable=True)
+    discord_url = Column(String(1024), nullable=True)
+    
+    # Donation platform (DonateX)
+    donation_url = Column(String(1024), nullable=True)
+    donation_title = Column(String(255), default="Поддержать на DonateX")
+    
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

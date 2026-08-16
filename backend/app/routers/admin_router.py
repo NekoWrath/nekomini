@@ -90,3 +90,44 @@ async def create_and_send_broadcast(
         failed_count=broadcast_result["failed_count"],
         message=f"Рассылка завершена: доставлено {broadcast_result['sent_count']}, ошибок {broadcast_result['failed_count']}"
     )
+
+
+from app.models import StreamerProfile
+from app.schemas import StreamerProfileOut, StreamerProfileUpdate
+
+@router.get("/profile", response_model=StreamerProfileOut)
+async def get_streamer_profile(
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Returns editable streamer profile & social links (Admin)."""
+    prof_res = await db.execute(select(StreamerProfile).where(StreamerProfile.id == 1))
+    prof = prof_res.scalars().first()
+    if not prof:
+        prof = StreamerProfile(id=1)
+        db.add(prof)
+        await db.commit()
+        await db.refresh(prof)
+    return prof
+
+
+@router.put("/profile", response_model=StreamerProfileOut)
+async def update_streamer_profile(
+    prof_in: StreamerProfileUpdate,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates streamer profile, social networks, and DonateX link (Admin)."""
+    prof_res = await db.execute(select(StreamerProfile).where(StreamerProfile.id == 1))
+    prof = prof_res.scalars().first()
+    if not prof:
+        prof = StreamerProfile(id=1)
+        db.add(prof)
+
+    update_data = prof_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(prof, field, value)
+
+    await db.commit()
+    await db.refresh(prof)
+    return prof

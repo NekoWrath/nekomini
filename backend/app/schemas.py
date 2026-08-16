@@ -110,10 +110,30 @@ class BroadcastResponse(BaseModel):
     failed_count: int
     message: str
 
-class StreamerInfo(BaseModel):
-    name: str
-    avatar: str
-    twitch_url: str
-    kick_url: str
-    vk_url: str
-    telegram_channel: str
+class StreamerProfileOut(BaseModel):
+    name: str = "StreamerLegend"
+    avatar: str = ""
+    bio: Optional[str] = ""
+    twitch_url: Optional[str] = None
+    telegram_channel: Optional[str] = None
+    youtube_url: Optional[str] = None
+    kick_url: Optional[str] = None
+    vk_url: Optional[str] = None
+    discord_url: Optional[str] = None
+    donation_url: Optional[str] = None
+    donation_title: Optional[str] = "Поддержать на DonateX"
+
+    model_config = ConfigDict(from_attributes=True)
+
+class StreamerProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    avatar: Optional[str] = None
+    bio: Optional[str] = None
+    twitch_url: Optional[str] = None
+    telegram_channel: Optional[str] = None
+    youtube_url: Optional[str] = None
+    kick_url: Optional[str] = None
+    vk_url: Optional[str] = None
+    discord_url: Optional[str] = None
+    donation_url: Optional[str] = None
+    donation_title: Optional[str] = None
