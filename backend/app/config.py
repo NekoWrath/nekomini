@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tma_streamer.db")
     
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
-    API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    API_PORT: int = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
 
     @property
     def admin_ids(self) -> List[int]:
