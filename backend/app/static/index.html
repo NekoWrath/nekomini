@@ -411,44 +411,60 @@
 
                 {/* Stream Cards */}
                 <div className="space-y-3">
-                  {filteredStreams.map(s => (
-                    <div key={s.id} className="p-3.5 rounded-2xl glass-panel relative">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-purple-300 bg-purple-950/50 px-2 py-0.5 rounded border border-purple-500/30">
-                          {s.platform} • {s.game_category}
-                        </span>
-                        <button
-                          onClick={() => toggleReminder(s.id)}
-                          className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${s.has_reminder ? 'bg-purple-600 text-white border-purple-400' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
-                        >
-                          {s.has_reminder ? '🔔 Включено' : '🔔 Напомнить'}
-                        </button>
-                      </div>
-
-                      <h4 className="font-display font-bold text-sm text-white mt-2">{s.title}</h4>
-                      {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
-
-                      <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                        <span className="text-slate-400">🕒 {new Date(s.start_time).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                        <div className="flex items-center gap-1">
-                          {isAdmin && (
-                            <button
-                              onClick={() => toggleLive(s.id, s.is_live)}
-                              className={`p-1 px-2 rounded font-bold text-[11px] ${s.is_live ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}
-                            >
-                              {s.is_live ? '⏹ Стоп' : '🔴 В эфир'}
-                            </button>
-                          )}
+                  {filteredStreams.length > 0 ? (
+                    filteredStreams.map(s => (
+                      <div key={s.id} className="p-3.5 rounded-2xl glass-panel relative">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-purple-300 bg-purple-950/50 px-2 py-0.5 rounded border border-purple-500/30">
+                            {s.platform} • {s.game_category}
+                          </span>
                           <button
-                            onClick={() => openLink(s.platform_url)}
-                            className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-2.5 py-1 rounded-lg font-bold"
+                            onClick={() => toggleReminder(s.id)}
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${s.has_reminder ? 'bg-purple-600 text-white border-purple-400' : 'bg-slate-800 text-slate-300 border-slate-700'}`}
                           >
-                            Смотреть
+                            {s.has_reminder ? '🔔 Включено' : '🔔 Напомнить'}
                           </button>
                         </div>
+
+                        <h4 className="font-display font-bold text-sm text-white mt-2">{s.title}</h4>
+                        {s.description && <p className="text-xs text-slate-400 mt-1">{s.description}</p>}
+
+                        <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                          <span className="text-slate-400">🕒 {new Date(s.start_time).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                          <div className="flex items-center gap-1">
+                            {isAdmin && (
+                              <button
+                                onClick={() => toggleLive(s.id, s.is_live)}
+                                className={`p-1 px-2 rounded font-bold text-[11px] ${s.is_live ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}
+                              >
+                                {s.is_live ? '⏹ Стоп' : '🔴 В эфир'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openLink(s.platform_url)}
+                              className="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-2.5 py-1 rounded-lg font-bold"
+                            >
+                              Смотреть
+                            </button>
+                          </div>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="p-8 rounded-2xl glass-panel text-center">
+                      <div className="text-3xl mb-2">📅</div>
+                      <div className="text-sm font-bold text-slate-200">Расписание пока пусто</div>
+                      <p className="text-xs text-slate-400 mt-1 mb-3">Запланируйте свой первый стрим!</p>
+                      {isAdmin && (
+                        <button
+                          onClick={() => { setEditingStream(null); setIsStreamModalOpen(true); }}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold"
+                        >
+                          + Добавить стрим
+                        </button>
+                      )}
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
@@ -484,53 +500,67 @@
 
                 {/* Suggestions List */}
                 <div className="space-y-3">
-                  {suggestions.map(sug => {
-                    const cat = CATEGORIES[sug.category] || CATEGORIES.other;
-                    const st = STATUSES[sug.status] || STATUSES.pending;
-                    return (
-                      <div key={sug.id} className="p-3.5 rounded-2xl glass-panel space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-200">{sug.author_name}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${cat.badge}`}>
-                            {cat.emoji} {cat.label}
-                          </span>
-                        </div>
-
-                        <h4 className="font-display font-bold text-sm text-white">{sug.title}</h4>
-                        <p className="text-xs text-slate-300">{sug.content}</p>
-
-                        {sug.admin_reply && (
-                          <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs italic text-slate-200">
-                            <span className="font-bold text-purple-400 block not-italic mb-0.5">💬 Ответ стримера:</span>
-                            «{sug.admin_reply}»
+                  {suggestions.length > 0 ? (
+                    suggestions.map(sug => {
+                      const cat = CATEGORIES[sug.category] || CATEGORIES.other;
+                      const st = STATUSES[sug.status] || STATUSES.pending;
+                      return (
+                        <div key={sug.id} className="p-3.5 rounded-2xl glass-panel space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-200">{sug.author_name}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${cat.badge}`}>
+                              {cat.emoji} {cat.label}
+                            </span>
                           </div>
-                        )}
 
-                        <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                          <span className={`text-[11px] px-2 py-0.5 rounded-full border ${st.badge}`}>
-                            {st.icon} {st.label}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            {isAdmin && (
+                          <h4 className="font-display font-bold text-sm text-white">{sug.title}</h4>
+                          <p className="text-xs text-slate-300">{sug.content}</p>
+
+                          {sug.admin_reply && (
+                            <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs italic text-slate-200">
+                              <span className="font-bold text-purple-400 block not-italic mb-0.5">💬 Ответ стримера:</span>
+                              «{sug.admin_reply}»
+                            </div>
+                          )}
+
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                            <span className={`text-[11px] px-2 py-0.5 rounded-full border ${st.badge}`}>
+                              {st.icon} {st.label}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {isAdmin && (
+                                <button
+                                  onClick={() => setModeratingSug(sug)}
+                                  className="bg-slate-800 text-purple-300 border border-purple-500/30 px-2 py-1 rounded text-xs font-semibold"
+                                >
+                                  Модерация
+                                </button>
+                              )}
                               <button
-                                onClick={() => setModeratingSug(sug)}
-                                className="bg-slate-800 text-purple-300 border border-purple-500/30 px-2 py-1 rounded text-xs font-semibold"
+                                onClick={() => voteSug(sug.id)}
+                                className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${sug.has_voted ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'bg-slate-800 text-slate-300'}`}
                               >
-                                Модерация
+                                <span>🔥</span>
+                                <span>{sug.upvotes_count}</span>
                               </button>
-                            )}
-                            <button
-                              onClick={() => voteSug(sug.id)}
-                              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${sug.has_voted ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white' : 'bg-slate-800 text-slate-300'}`}
-                            >
-                              <span>🔥</span>
-                              <span>{sug.upvotes_count}</span>
-                            </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 rounded-2xl glass-panel text-center">
+                      <div className="text-3xl mb-2">💡</div>
+                      <div className="text-sm font-bold text-slate-200">В предложке пока пусто</div>
+                      <p className="text-xs text-slate-400 mt-1 mb-3">Будьте первым, кто предложит идею для стрима!</p>
+                      <button
+                        onClick={() => setIsSugModalOpen(true)}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold"
+                      >
+                        + Написать идею
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
