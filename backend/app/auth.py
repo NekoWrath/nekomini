@@ -143,9 +143,10 @@ async def get_current_user(
 
 async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     """Dependency that restricts access to admins and moderators."""
-    if current_user.role not in ("admin", "moderator"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin or Moderator privileges required"
-        )
-    return current_user
+    if current_user.telegram_id in settings.admin_ids or current_user.role in ("admin", "moderator"):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin or Moderator privileges required"
+    )

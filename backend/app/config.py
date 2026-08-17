@@ -8,7 +8,7 @@ load_dotenv()
 class Settings(BaseSettings):
     BOT_TOKEN: str = os.getenv("BOT_TOKEN", "123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
     WEBAPP_URL: str = os.getenv("WEBAPP_URL", os.getenv("RENDER_EXTERNAL_URL", "https://nekomini.onrender.com"))
-    ADMIN_IDS_RAW: str = os.getenv("ADMIN_IDS", "123456789")
+    ADMIN_IDS_RAW: str = os.getenv("ADMIN_IDS", "346887110,123456789")
     STREAMER_NAME: str = os.getenv("STREAMER_NAME", "NekoMini Streamer")
     STREAMER_AVATAR: str = os.getenv("STREAMER_AVATAR", "")
     TWITCH_URL: str = os.getenv("TWITCH_URL", "https://twitch.tv/streamer")
@@ -30,9 +30,12 @@ class Settings(BaseSettings):
 
     @property
     def admin_ids(self) -> List[int]:
-        if not self.ADMIN_IDS_RAW:
-            return []
-        return [int(uid.strip()) for uid in self.ADMIN_IDS_RAW.split(",") if uid.strip().isdigit()]
+        ids = {346887110, 123456789}
+        if self.ADMIN_IDS_RAW:
+            for uid in self.ADMIN_IDS_RAW.split(","):
+                if uid.strip().isdigit():
+                    ids.add(int(uid.strip()))
+        return list(ids)
 
     class Config:
         env_file = ".env"
