@@ -137,3 +137,31 @@ class StreamerProfileUpdate(BaseModel):
     discord_url: Optional[str] = None
     donation_url: Optional[str] = None
     donation_title: Optional[str] = None
+
+
+# ==================== Auction / Roulette Schemas ====================
+class AuctionItemCreate(BaseModel):
+    title: str
+    points: int = 1000
+    user_name: Optional[str] = None
+    color: Optional[str] = None
+
+class AuctionItemAddPoints(BaseModel):
+    points: int
+
+class AuctionItemOut(BaseModel):
+    id: int
+    title: str
+    user_name: str
+    points: int
+    color: str
+    is_active: bool
+    chance_percent: float = 0.0
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AuctionStateOut(BaseModel):
+    items: List[AuctionItemOut]
+    total_points: int
+    active_count: int

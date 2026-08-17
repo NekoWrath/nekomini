@@ -140,3 +140,15 @@ class StreamerProfile(Base):
     donation_title = Column(String(255), default="Поддержать на DonateX")
     
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class AuctionItem(Base):
+    __tablename__ = "auction_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    title = Column(String(255), nullable=False)
+    user_name = Column(String(255), default="Зритель")
+    points = Column(Integer, default=1000, nullable=False)
+    color = Column(String(32), default="#9333ea")
+    is_active = Column(Boolean, default=True)  # True = on wheel, False = eliminated
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

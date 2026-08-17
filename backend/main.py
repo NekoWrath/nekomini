@@ -17,6 +17,8 @@ from app.routers.schedule_router import router as schedule_router
 from app.routers.suggestions_router import router as suggestions_router
 from app.routers.settings_router import router as settings_router
 from app.routers.admin_router import router as admin_router
+from app.routers.upload_router import router as upload_router
+from app.routers.auction_router import router as auction_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,6 +106,8 @@ app.include_router(schedule_router)
 app.include_router(suggestions_router)
 app.include_router(settings_router)
 app.include_router(admin_router)
+app.include_router(upload_router)
+app.include_router(auction_router)
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

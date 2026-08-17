@@ -148,7 +148,127 @@
 
     function isImageUrl(url) {
       if (!url) return false;
-      return (/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i).test(url) || url.includes('imgur.com') || url.includes('images.unsplash.com');
+      return (/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i).test(url) || url.includes('imgur.com') || url.includes('images.unsplash.com') || url.includes('/static/uploads/');
+    }
+
+    // Interactive HTML5 Canvas Roulette Wheel Component
+    function RouletteWheel({ items, rotation, isSpinning, onSpin, isAdmin, rouletteMode }) {
+      const canvasRef = useRef(null);
+      const activeItems = items.filter(it => it.is_active);
+      const totalPoints = activeItems.reduce((acc, it) => acc + it.points, 0);
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const size = canvas.width;
+        const center = size / 2;
+        const radius = center - 14;
+
+        ctx.clearRect(0, 0, size, size);
+
+        if (activeItems.length === 0) {
+          ctx.beginPath();
+          ctx.arc(center, center, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#1e293b';
+          ctx.fill();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = '#475569';
+          ctx.stroke();
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 13px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('Добавьте лоты в аукцион', center, center);
+          return;
+        }
+
+        let startAngle = rotation;
+
+        activeItems.forEach((item) => {
+          const sliceAngle = (item.points / totalPoints) * 2 * Math.PI;
+          const endAngle = startAngle + sliceAngle;
+
+          // Draw slice
+          ctx.beginPath();
+          ctx.moveTo(center, center);
+          ctx.arc(center, center, radius, startAngle, endAngle);
+          ctx.closePath();
+          ctx.fillStyle = item.color || '#9333ea';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#0f172a';
+          ctx.stroke();
+
+          // Draw label
+          ctx.save();
+          ctx.translate(center, center);
+          ctx.rotate(startAngle + sliceAngle / 2);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.shadowColor = 'rgba(0,0,0,0.8)';
+          ctx.shadowBlur = 4;
+
+          const pct = Math.round((item.points / totalPoints) * 100);
+          let label = item.title;
+          if (label.length > 13) label = label.slice(0, 11) + '…';
+          ctx.fillText(`${label} (${pct}%)`, radius - 12, 4);
+          ctx.restore();
+
+          startAngle = endAngle;
+        });
+
+        // Outer glow border
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, 2 * Math.PI);
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.stroke();
+
+        // Center Hub
+        ctx.beginPath();
+        ctx.arc(center, center, 22, 0, 2 * Math.PI);
+        ctx.fillStyle = '#0f172a';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#f43f5e';
+        ctx.stroke();
+
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★', center, center);
+
+      }, [activeItems, totalPoints, rotation]);
+
+      return (
+        <div className="flex flex-col items-center justify-center relative my-1">
+          <div className="relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 text-rose-500 text-2xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-pulse pointer-events-none">
+              ▼
+            </div>
+            <canvas
+              ref={canvasRef}
+              width={280}
+              height={280}
+              className="rounded-full shadow-2xl border-4 border-slate-800/80 bg-slate-950"
+            />
+          </div>
+
+          <div className="mt-3 w-full max-w-xs flex gap-2">
+            <button
+              onClick={onSpin}
+              disabled={isSpinning || activeItems.length < 2}
+              className={`flex-1 py-3 rounded-2xl font-display font-extrabold text-sm text-white shadow-glow-live transition-all btn-press ${isSpinning || activeItems.length < 2 ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-60' : 'bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:brightness-110'}`}
+            >
+              {isSpinning ? '🎲 КРУТИТСЯ...' : activeItems.length < 2 ? '⚠️ Нужно минимум 2 лота' : '🎰 КРУТИТЬ РУЛЕТКУ!'}
+            </button>
+          </div>
+        </div>
+      );
     }
 
     // Main App Component
@@ -169,6 +289,7 @@
       const [sugSearch, setSugSearch] = useState('');
       const [dayFilter, setDayFilter] = useState('all');
 
+      // Modals
       const [isSugModalOpen, setIsSugModalOpen] = useState(false);
       const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
       const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
@@ -177,6 +298,19 @@
       const [youtubeVideos, setYoutubeVideos] = useState([]);
       const [editingStream, setEditingStream] = useState(null);
       const [moderatingSug, setModeratingSug] = useState(null);
+
+      // Auction & Roulette states
+      const [auctionData, setAuctionData] = useState({ items: [], total_points: 0, active_count: 0 });
+      const [isLotModalOpen, setIsLotModalOpen] = useState(false);
+      const [targetLotForPoints, setTargetLotForPoints] = useState(null);
+      const [isSpinning, setIsSpinning] = useState(false);
+      const [rouletteWinner, setRouletteWinner] = useState(null);
+      const [rouletteMode, setRouletteMode] = useState('elimination'); // 'elimination' (на вылет) or 'instant'
+      const [wheelRotation, setWheelRotation] = useState(0);
+
+      // Image upload states
+      const [uploadingImage, setUploadingImage] = useState(false);
+      const [selectedImagePreview, setSelectedImagePreview] = useState('');
 
       const [toast, setToast] = useState(null);
 
@@ -206,6 +340,13 @@
         } catch(e) {}
       }, [getHeaders]);
 
+      const loadAuction = useCallback(async () => {
+        try {
+          const res = await fetch('/api/auction', { headers: getHeaders() });
+          if (res.ok) setAuctionData(await res.json());
+        } catch(e) {}
+      }, [getHeaders]);
+
       // Load Data
       const loadAll = useCallback(async () => {
         try {
@@ -226,16 +367,18 @@
           if (streamsRes.ok) setStreams(await streamsRes.json());
           if (currRes.ok) setCurrentStream(await currRes.json());
           if (sugRes.ok) setSuggestions(await sugRes.json());
+
+          loadAuction();
         } catch (e) {
           console.warn('API fetch error:', e);
         }
-      }, [getHeaders, sugTab, sugCat, sugSearch]);
+      }, [getHeaders, sugTab, sugCat, sugSearch, loadAuction]);
 
       useEffect(() => {
         loadAll();
       }, [loadAll]);
 
-      // Load Admin Stats if on admin tab
+      // Load Admin Stats & Auction if on tab
       useEffect(() => {
         if (activeTab === 'admin' && (user?.role === 'admin' || mockRole === 'admin')) {
           fetch('/api/admin/stats', { headers: getHeaders() })
@@ -243,7 +386,10 @@
             .then(d => d && setAdminStats(d));
           loadVideos();
         }
-      }, [activeTab, user?.role, mockRole, getHeaders, loadVideos]);
+        if (activeTab === 'auction') {
+          loadAuction();
+        }
+      }, [activeTab, user?.role, mockRole, getHeaders, loadVideos, loadAuction]);
 
       // MainButton binding
       useEffect(() => {
@@ -321,6 +467,168 @@
           }
         } catch(e) {
           showToast('Ошибка сети', 'error');
+        }
+      };
+
+      // Device Upload Handler
+      const handleDeviceUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          showToast('Пожалуйста, выберите картинку (JPG, PNG, WebP, GIF)', 'error');
+          return;
+        }
+        setUploadingImage(true);
+        haptic.impact('light');
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const authHeaders = isTg && tg.initData
+            ? { 'X-Telegram-Init-Data': tg.initData }
+            : { 'X-Mock-User-Id': mockRole === 'admin' ? '123456789' : '987654321', 'X-Mock-Role': mockRole };
+
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: authHeaders,
+            body: formData,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setSelectedImagePreview(data.url);
+            showToast('Фото успешно загружено!', 'success');
+          } else {
+            const err = await res.json();
+            showToast(err.detail || 'Ошибка загрузки фото', 'error');
+          }
+        } catch(err) {
+          showToast('Ошибка сети при загрузке фото', 'error');
+        } finally {
+          setUploadingImage(false);
+        }
+      };
+
+      // Spin Roulette Wheel
+      const spinWheel = () => {
+        if (isSpinning) return;
+        const activeItems = auctionData.items.filter(it => it.is_active);
+        if (activeItems.length < 2) {
+          showToast('Для вращения нужно минимум 2 активных лота!', 'error');
+          return;
+        }
+        setIsSpinning(true);
+        setRouletteWinner(null);
+        haptic.impact('heavy');
+
+        const totalPoints = activeItems.reduce((acc, it) => acc + it.points, 0);
+        let randomPoint = Math.random() * totalPoints;
+        let selectedItem = activeItems[0];
+        let accumulated = 0;
+        let winnerIndex = 0;
+
+        for (let i = 0; i < activeItems.length; i++) {
+          accumulated += activeItems[i].points;
+          if (randomPoint <= accumulated) {
+            selectedItem = activeItems[i];
+            winnerIndex = i;
+            break;
+          }
+        }
+
+        let startAngle = 0;
+        for (let i = 0; i < winnerIndex; i++) {
+          startAngle += (activeItems[i].points / totalPoints) * 2 * Math.PI;
+        }
+        const sectorAngle = (selectedItem.points / totalPoints) * 2 * Math.PI;
+        const targetSectorCenter = startAngle + sectorAngle / 2;
+
+        const spins = 6 + Math.floor(Math.random() * 3);
+        const finalAngle = spins * 2 * Math.PI + (3 * Math.PI / 2 - targetSectorCenter) + (Math.random() * 0.4 - 0.2) * sectorAngle;
+
+        const duration = 5500;
+        const startTime = performance.now();
+        const initialRotation = wheelRotation % (2 * Math.PI);
+
+        const animate = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 4);
+          const currentRot = initialRotation + (finalAngle - initialRotation) * ease;
+          setWheelRotation(currentRot);
+
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            setIsSpinning(false);
+            setRouletteWinner(selectedItem);
+            haptic.notify('success');
+          }
+        };
+
+        requestAnimationFrame(animate);
+      };
+
+      const addPointsToLot = async (lotId, pointsToAdd) => {
+        haptic.impact('medium');
+        try {
+          const res = await fetch(`/api/auction/items/${lotId}/add-points`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ points: pointsToAdd })
+          });
+          if (res.ok) {
+            showToast(`+${pointsToAdd} баллов добавлено!`, 'success');
+            setTargetLotForPoints(null);
+            loadAuction();
+          }
+        } catch(e) {
+          showToast('Ошибка пополнения баллов', 'error');
+        }
+      };
+
+      const toggleLotActive = async (lotId) => {
+        haptic.impact('light');
+        try {
+          const res = await fetch(`/api/auction/items/${lotId}/toggle-active`, {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            loadAuction();
+          }
+        } catch(e) {}
+      };
+
+      const deleteLot = async (lotId) => {
+        if (!window.confirm('Удалить этот лот из аукциона?')) return;
+        haptic.impact('medium');
+        try {
+          const res = await fetch(`/api/auction/items/${lotId}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showToast('Лот удален', 'success');
+            loadAuction();
+          }
+        } catch(e) {
+          showToast('Ошибка удаления лота', 'error');
+        }
+      };
+
+      const resetAuction = async () => {
+        if (!window.confirm('Сбросить и очистить все лоты аукциона?')) return;
+        haptic.impact('heavy');
+        try {
+          const res = await fetch('/api/auction/reset', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showToast('Аукцион сброшен!', 'success');
+            loadAuction();
+          }
+        } catch(e) {
+          showToast('Ошибка сброса аукциона', 'error');
         }
       };
 
@@ -691,7 +999,170 @@
               </div>
             )}
 
-            {/* TAB 3: SETTINGS */}
+            {/* TAB 3: AUCTION & ROULETTE */}
+            {activeTab === 'auction' && (
+              <div className="space-y-4">
+                {/* Hero Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border border-purple-500/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-display font-bold text-base text-white flex items-center gap-1.5">
+                        <span>🎰</span>
+                        <span>Аукцион и Рулетка</span>
+                      </h3>
+                      <p className="text-xs text-purple-300">Баллы канала Twitch & Выбывание лотов</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                        💰 {auctionData.total_points.toLocaleString('ru-RU')} очков
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mode Selector */}
+                  {isAdmin && (
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/80 border border-white/5 text-xs">
+                      <span className="text-slate-400 text-[11px]">Режим игры:</span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setRouletteMode('elimination')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${rouletteMode === 'elimination' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                        >
+                          🔥 На вылет
+                        </button>
+                        <button
+                          onClick={() => setRouletteMode('instant')}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${rouletteMode === 'instant' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+                        >
+                          🏆 Победитель
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Canvas Wheel */}
+                  <RouletteWheel
+                    items={auctionData.items}
+                    rotation={wheelRotation}
+                    isSpinning={isSpinning}
+                    onSpin={spinWheel}
+                    isAdmin={isAdmin}
+                    rouletteMode={rouletteMode}
+                  />
+                </div>
+
+                {/* Lots List Header */}
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span>🎮 Лоты на колесе ({auctionData.active_count})</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {isAdmin && auctionData.items.length > 0 && (
+                      <button
+                        onClick={resetAuction}
+                        className="text-[11px] font-bold text-rose-400 bg-rose-950/50 hover:bg-rose-900 border border-rose-500/30 px-2 py-1 rounded-lg"
+                      >
+                        Сброс
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsLotModalOpen(true)}
+                      className="text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 px-3 py-1.5 rounded-xl shadow-sm btn-press"
+                    >
+                      + Добавить лот
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lots Cards */}
+                <div className="space-y-2">
+                  {auctionData.items.length > 0 ? (
+                    auctionData.items.map(lot => (
+                      <div
+                        key={lot.id}
+                        className={`p-3 rounded-2xl glass-panel relative overflow-hidden transition-all ${!lot.is_active ? 'opacity-50 grayscale' : ''}`}
+                      >
+                        {/* Top row */}
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: lot.color }} />
+                            <span className={`font-bold text-sm ${lot.is_active ? 'text-white' : 'text-slate-400 line-through'}`}>
+                              {lot.title}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-extrabold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                              {lot.points.toLocaleString('ru-RU')} баллов
+                            </span>
+                            <span className="text-xs font-bold text-purple-300">
+                              {lot.chance_percent}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Chance progress bar */}
+                        <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden my-1.5 border border-white/5">
+                          <div
+                            className="h-full transition-all duration-500 rounded-full"
+                            style={{
+                              width: `${lot.is_active ? Math.max(4, lot.chance_percent) : 0}%`,
+                              backgroundColor: lot.color || '#9333ea'
+                            }}
+                          />
+                        </div>
+
+                        {/* Bottom info & actions */}
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
+                          <span className="text-[11px] text-slate-400">
+                            Заказчик: <span className="text-slate-200 font-semibold">{lot.user_name}</span>
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setTargetLotForPoints(lot)}
+                              className="bg-purple-950/60 hover:bg-purple-900 border border-purple-500/30 text-purple-300 font-bold px-2 py-0.5 rounded-lg text-[11px] btn-press"
+                            >
+                              + Баллы
+                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  onClick={() => toggleLotActive(lot.id)}
+                                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border ${lot.is_active ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-emerald-950 text-emerald-300 border-emerald-500/30'}`}
+                                  title={lot.is_active ? 'Пометить выбывшим' : 'Вернуть на колесо'}
+                                >
+                                  {lot.is_active ? 'Выбить' : 'Вернуть'}
+                                </button>
+                                <button
+                                  onClick={() => deleteLot(lot.id)}
+                                  className="p-1 px-1.5 text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg text-xs"
+                                  title="Удалить"
+                                >
+                                  🗑️
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 rounded-2xl glass-panel text-center">
+                      <div className="text-3xl mb-2">🎰</div>
+                      <div className="text-sm font-bold text-slate-200">Колесо пока пусто</div>
+                      <p className="text-xs text-slate-400 mt-1 mb-3">Добавьте варианты игр, фильмов или челленджей за баллы Twitch!</p>
+                      <button
+                        onClick={() => setIsLotModalOpen(true)}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold btn-press"
+                      >
+                        + Добавить первый лот
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: SETTINGS */}
             {activeTab === 'settings' && (
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl glass-panel-elevated flex items-center gap-3">
@@ -790,7 +1261,7 @@
               </div>
             )}
 
-            {/* TAB 4: ADMIN */}
+            {/* TAB 5: ADMIN */}
             {activeTab === 'admin' && isAdmin && (
               <div className="space-y-4">
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border border-purple-500/40">
@@ -842,6 +1313,7 @@
             {[
               { id: 'schedule', l: 'Расписание', icon: '📅' },
               { id: 'suggestions', l: 'Предложка', icon: '💡' },
+              { id: 'auction', l: 'Рулетка', icon: '🎰' },
               { id: 'settings', l: 'Настройки', icon: '🔔' },
               ...(isAdmin ? [{ id: 'admin', l: 'Админка', icon: '🛡️' }] : []),
             ].map(t => (
@@ -869,16 +1341,17 @@
               <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-white text-base">💡 Предложить идею / видео</h3>
-                  <button onClick={() => setIsSugModalOpen(false)} className="text-slate-400">✕</button>
+                  <button onClick={() => { setIsSugModalOpen(false); setSelectedImagePreview(''); }} className="text-slate-400">✕</button>
                 </div>
                 <form onSubmit={async (e) => {
                   e.preventDefault();
                   const form = e.target;
+                  const mediaUrl = selectedImagePreview || (form.media_url ? form.media_url.value.trim() : null) || null;
                   const data = {
                     category: form.cat.value,
                     title: form.title.value.trim(),
                     content: form.content.value.trim() || '',
-                    media_url: form.media_url.value.trim() || null
+                    media_url: mediaUrl
                   };
                   const res = await fetch('/api/suggestions', {
                     method: 'POST',
@@ -888,6 +1361,7 @@
                   if (res.ok) {
                     showToast('Идея отправлена!', 'success');
                     setIsSugModalOpen(false);
+                    setSelectedImagePreview('');
                     loadAll();
                   } else {
                     showToast('Ошибка отправки идеи', 'error');
@@ -906,15 +1380,52 @@
                     <label className="block text-slate-300 font-semibold mb-1">Заголовок / Название</label>
                     <input name="title" required placeholder="Например: Посмотреть этот клип на стриме" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
                   </div>
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Ссылка на YouTube видео или картинку (необязательно)</label>
-                    <input name="media_url" placeholder="https://youtube.com/watch?v=... или ссылка на фото" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                  
+                  {/* Media: Device Upload or Link */}
+                  <div className="space-y-2">
+                    <label className="block text-slate-300 font-semibold mb-0.5">Прикрепить фото или видео</label>
+                    
+                    <div className="flex gap-2 items-center">
+                      <label className="cursor-pointer flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all">
+                        <span>{uploadingImage ? '⏳' : '📁'}</span>
+                        <span>{uploadingImage ? 'Загрузка фото...' : 'Загрузить фото с устройства'}</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleDeviceUpload}
+                          disabled={uploadingImage}
+                        />
+                      </label>
+                    </div>
+
+                    {selectedImagePreview && (
+                      <div className="relative rounded-xl overflow-hidden max-h-36 border border-purple-500/40 bg-slate-950 p-1">
+                        <img src={selectedImagePreview} className="w-full h-full object-cover rounded-lg" alt="preview" />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedImagePreview('')}
+                          className="absolute top-2 right-2 bg-rose-600/90 hover:bg-rose-600 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold text-xs shadow-lg"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    {!selectedImagePreview && (
+                      <input
+                        name="media_url"
+                        placeholder="Или ссылка: https://youtube.com/... или картинка"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white"
+                      />
+                    )}
                   </div>
+
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">Описание (необязательно)</label>
                     <textarea name="content" rows="2" placeholder="Комментарий или подробности..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white resize-none" />
                   </div>
-                  <button type="submit" className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl btn-press">
+                  <button type="submit" disabled={uploadingImage} className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl btn-press">
                     Отправить в предложку
                   </button>
                 </form>
@@ -1096,6 +1607,145 @@
                     Запустить рассылку ботом
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE AUCTION LOT MODAL */}
+          {isLotModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">🎰 Добавить лот на колесо</h3>
+                  <button onClick={() => setIsLotModalOpen(false)} className="text-slate-400">✕</button>
+                </div>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target;
+                  const payload = {
+                    title: form.title.value.trim(),
+                    points: parseInt(form.points.value, 10) || 1000,
+                    user_name: form.user_name?.value?.trim() || user?.first_name || 'Зритель'
+                  };
+                  const res = await fetch('/api/auction/items', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify(payload)
+                  });
+                  if (res.ok) {
+                    showToast('Лот добавлен на колесо!', 'success');
+                    setIsLotModalOpen(false);
+                    loadAuction();
+                  } else {
+                    showToast('Ошибка добавления лота', 'error');
+                  }
+                }} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Название игры / фильма / челленджа</label>
+                    <input name="title" required placeholder="Например: Dark Souls 3 без брони" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Баллы (Twitch points)</label>
+                      <input name="points" type="number" min="100" step="100" defaultValue="1000" required className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Никнейм заказчика</label>
+                      <input name="user_name" defaultValue={user?.first_name || 'Зритель'} required className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl btn-press">
+                    Добавить лот на колесо
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ADD POINTS TO LOT MODAL */}
+          {targetLotForPoints && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
+              <div className="bg-slate-900 border border-amber-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white text-base">💰 Докинуть баллы к лоту</h3>
+                  <button onClick={() => setTargetLotForPoints(null)} className="text-slate-400">✕</button>
+                </div>
+                <div className="p-3 bg-slate-950 rounded-xl border border-white/5 text-xs">
+                  <div className="font-bold text-white text-sm">{targetLotForPoints.title}</div>
+                  <div className="text-slate-400 mt-0.5">
+                    Текущий баланс: <span className="text-amber-300 font-bold">{targetLotForPoints.points.toLocaleString('ru-RU')} баллов</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-2">
+                  {[500, 1000, 5000].map(amt => (
+                    <button
+                      key={amt}
+                      onClick={() => addPointsToLot(targetLotForPoints.id, amt)}
+                      className="py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 text-purple-300 font-bold text-xs btn-press"
+                    >
+                      +{amt.toLocaleString('ru-RU')}
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const amt = parseInt(e.target.custom_points.value, 10);
+                  if (amt && amt > 0) addPointsToLot(targetLotForPoints.id, amt);
+                }} className="space-y-2 text-xs pt-1">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Или ввести свое количество баллов:</label>
+                    <input name="custom_points" type="number" min="50" step="50" placeholder="Например: 2500" required className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
+                  </div>
+                  <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 text-white font-bold rounded-xl btn-press">
+                    Внести баллы
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ROULETTE WINNER MODAL */}
+          {rouletteWinner && (
+            <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border-2 border-rose-500/60 rounded-3xl p-6 w-full max-w-sm text-center space-y-4 shadow-glow-live animate-bounce">
+                <div className="text-4xl">
+                  {rouletteMode === 'elimination' ? '💥' : '👑'}
+                </div>
+                
+                <div>
+                  <span className={`text-[11px] font-extrabold uppercase px-3 py-1 rounded-full ${rouletteMode === 'elimination' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'}`}>
+                    {rouletteMode === 'elimination' ? 'Сектор выбывает!' : 'Победитель рулетки!'}
+                  </span>
+                  <h3 className="font-display font-extrabold text-xl text-white mt-2">
+                    {rouletteWinner.title}
+                  </h3>
+                  <p className="text-xs text-purple-300 mt-1">
+                    Заказчик: <span className="text-white font-bold">{rouletteWinner.user_name}</span> • 💰 {rouletteWinner.points.toLocaleString('ru-RU')} баллов
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  {rouletteMode === 'elimination' && (
+                    <button
+                      onClick={async () => {
+                        await toggleLotActive(rouletteWinner.id);
+                        setRouletteWinner(null);
+                        showToast(`Лот «${rouletteWinner.title}» выбыл!`, 'info');
+                      }}
+                      className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md btn-press"
+                    >
+                      ❌ Исключить из колеса
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setRouletteWinner(null)}
+                    className={`py-3 ${rouletteMode === 'elimination' ? 'px-4 bg-slate-800 text-slate-300' : 'w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white'} font-bold text-xs rounded-xl btn-press`}
+                  >
+                    {rouletteMode === 'elimination' ? 'Оставить' : 'Отлично!'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
