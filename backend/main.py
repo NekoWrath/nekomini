@@ -19,6 +19,7 @@ from app.routers.settings_router import router as settings_router
 from app.routers.admin_router import router as admin_router
 from app.routers.upload_router import router as upload_router
 from app.routers.twitch_router import router as twitch_router
+from app.routers.giveaway_router import router as giveaway_router, admin_router as admin_giveaway_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -142,6 +143,8 @@ app.include_router(settings_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
 app.include_router(twitch_router)
+app.include_router(giveaway_router)
+app.include_router(admin_giveaway_router)
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

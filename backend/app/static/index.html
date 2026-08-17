@@ -190,6 +190,21 @@
       const [promocodesList, setPromocodesList] = useState([]);
       const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
 
+      // Giveaways & Lottery States
+      const [giveaways, setGiveaways] = useState([]);
+      const [isGiveawayModalOpen, setIsGiveawayModalOpen] = useState(false);
+      const [buyTicketsModal, setBuyTicketsModal] = useState({ isOpen: false, giveaway: null, count: 1 });
+      const [isBuyingTickets, setIsBuyingTickets] = useState(false);
+      const [isPickingWinner, setIsPickingWinner] = useState(false);
+      const [newGiveaway, setNewGiveaway] = useState({
+        title: '',
+        description: '',
+        image_url: '',
+        ticket_price: 100,
+        max_tickets_per_user: 10,
+        end_time: ''
+      });
+
       const [toast, setToast] = useState(null);
 
       const showToast = (text, type = 'info') => {
@@ -378,6 +393,111 @@
         } catch(e) {}
       }, [getHeaders]);
 
+      const loadGiveaways = useCallback(async () => {
+        try {
+          const res = await fetch('/api/giveaways', { headers: getHeaders() });
+          if (res.ok) setGiveaways(await res.json());
+        } catch(e) {}
+      }, [getHeaders]);
+
+      const handleBuyTickets = async (giveawayId, count = 1) => {
+        try {
+          setIsBuyingTickets(true);
+          haptic.impact('medium');
+          const res = await fetch(`/api/giveaways/${giveawayId}/buy-tickets`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ tickets_count: count })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(data.message, 'success');
+            setBuyTicketsModal({ isOpen: false, giveaway: null, count: 1 });
+            loadGiveaways();
+            loadWallet();
+            loadAll();
+          } else {
+            showToast(data.detail || 'Ошибка покупки билетов', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка покупки билетов', 'error');
+        } finally {
+          setIsBuyingTickets(false);
+        }
+      };
+
+      const handleCreateGiveaway = async (e) => {
+        if (e) e.preventDefault();
+        if (!newGiveaway.title.trim() || !newGiveaway.end_time) {
+          showToast('Укажите название приза и дату окончания', 'error');
+          return;
+        }
+        try {
+          haptic.impact('medium');
+          const res = await fetch('/api/admin/giveaways', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({
+              title: newGiveaway.title.trim(),
+              description: newGiveaway.description,
+              image_url: newGiveaway.image_url,
+              ticket_price: parseInt(newGiveaway.ticket_price) || 100,
+              max_tickets_per_user: parseInt(newGiveaway.max_tickets_per_user) || null,
+              end_time: new Date(newGiveaway.end_time).toISOString()
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast('Розыгрыш успешно запущен!', 'success');
+            setIsGiveawayModalOpen(false);
+            setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: '' });
+            loadGiveaways();
+          } else {
+            showToast(data.detail || 'Ошибка создания розыгрыша', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка создания розыгрыша', 'error');
+        }
+      };
+
+      const handlePickWinner = async (giveawayId) => {
+        if (!confirm('Выбрать случайного победителя прямо сейчас?')) return;
+        try {
+          setIsPickingWinner(true);
+          haptic.impact('heavy');
+          const res = await fetch(`/api/admin/giveaways/${giveawayId}/pick-winner`, {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(data.message, 'success');
+            loadGiveaways();
+          } else {
+            showToast(data.detail || 'Ошибка выбора победителя', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка выбора победителя', 'error');
+        } finally {
+          setIsPickingWinner(false);
+        }
+      };
+
+      const handleDeleteGiveaway = async (giveawayId) => {
+        if (!confirm('Удалить этот розыгрыш?')) return;
+        try {
+          haptic.impact('medium');
+          const res = await fetch(`/api/admin/giveaways/${giveawayId}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showToast('Розыгрыш удален', 'info');
+            loadGiveaways();
+          }
+        } catch(e) {}
+      };
+
       // Load Data
       const loadAll = useCallback(async () => {
         try {
@@ -389,15 +509,17 @@
             setStreamer(meData.streamer_info);
           }
 
-          const [streamsRes, currRes, sugRes] = await Promise.all([
+          const [streamsRes, currRes, sugRes, givRes] = await Promise.all([
             fetch('/api/schedule', { headers }),
             fetch('/api/schedule/current', { headers }),
-            fetch(`/api/suggestions?tab=${sugTab}&category=${sugCat}&search=${encodeURIComponent(sugSearch)}`, { headers })
+            fetch(`/api/suggestions?tab=${sugTab}&category=${sugCat}&search=${encodeURIComponent(sugSearch)}`, { headers }),
+            fetch('/api/giveaways', { headers })
           ]);
 
           if (streamsRes.ok) setStreams(await streamsRes.json());
           if (currRes.ok) setCurrentStream(await currRes.json());
           if (sugRes.ok) setSuggestions(await sugRes.json());
+          if (givRes.ok) setGiveaways(await givRes.json());
         } catch (e) {
           console.warn('API fetch error:', e);
         }
@@ -415,8 +537,9 @@
             .then(d => d && setAdminStats(d));
           loadVideos();
           loadPromocodes();
+          loadGiveaways();
         }
-      }, [activeTab, user?.role, mockRole, getHeaders, loadVideos, loadPromocodes]);
+      }, [activeTab, user?.role, mockRole, getHeaders, loadVideos, loadPromocodes, loadGiveaways]);
 
       // MainButton binding
       useEffect(() => {
@@ -621,6 +744,101 @@
                         <span>{currentStream.is_live ? 'Смотреть прямо сейчас' : 'Перейти на канал стримера'}</span>
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* ACTIVE & RECENT GIVEAWAYS WIDGET */}
+                {giveaways && giveaways.length > 0 && (
+                  <div className="space-y-3">
+                    {giveaways.map(g => (
+                      <div key={g.id} className="p-4 rounded-2xl relative overflow-hidden border border-amber-500/40 bg-gradient-to-br from-amber-950/30 via-slate-900 to-purple-950/40 shadow-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
+                            g.status === 'active' 
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' 
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          }`}>
+                            <span>{g.status === 'active' ? '🎁 РОЗЫГРЫШ' : '🎉 ЗАВЕРШЕН'}</span>
+                          </span>
+
+                          <span className="text-[10px] text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded-md font-semibold">
+                            {g.status === 'active' ? `До ${new Date(g.end_time).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Победитель выбран'}
+                          </span>
+                        </div>
+
+                        {/* Prize Content */}
+                        <div className="flex gap-3 items-center">
+                          {g.image_url && (
+                            <img src={g.image_url} alt={g.title} className="w-14 h-14 rounded-xl object-cover border border-amber-500/30 shadow-md flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-display font-bold text-sm text-white truncate">{g.title}</h4>
+                            {g.description && <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">{g.description}</p>}
+                          </div>
+                        </div>
+
+                        {/* Winner Banner if Completed */}
+                        {g.status === 'completed' && g.winner_name && (
+                          <div className="mt-3 p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {g.winner_avatar ? (
+                                <img src={g.winner_avatar} className="w-7 h-7 rounded-full object-cover border border-emerald-400" alt="winner" />
+                              ) : (
+                                <span className="text-lg">👑</span>
+                              )}
+                              <div>
+                                <div className="text-[10px] text-emerald-300 font-semibold">Победитель:</div>
+                                <div className="text-xs font-bold text-white">{g.winner_name} {g.winning_ticket_number ? `(Билет #${g.winning_ticket_number})` : ''}</div>
+                              </div>
+                            </div>
+                            <span className="text-base">🎉</span>
+                          </div>
+                        )}
+
+                        {/* Stats & Ticket Purchase if Active */}
+                        {g.status === 'active' && (
+                          <div className="mt-3 space-y-2.5">
+                            <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
+                              <div className="bg-slate-950/60 p-1.5 rounded-xl border border-white/5">
+                                <div className="text-[10px] text-slate-400">Билет</div>
+                                <div className="font-bold text-amber-300 text-xs">{g.ticket_price} PTS</div>
+                              </div>
+                              <div className="bg-slate-950/60 p-1.5 rounded-xl border border-white/5">
+                                <div className="text-[10px] text-slate-400">В банке</div>
+                                <div className="font-bold text-white text-xs">{g.total_tickets} шт.</div>
+                              </div>
+                              <div className="bg-slate-950/60 p-1.5 rounded-xl border border-white/5">
+                                <div className="text-[10px] text-slate-400">Ваш шанс</div>
+                                <div className="font-bold text-emerald-400 text-xs">{g.user_win_chance_percent}% ({g.user_tickets_count} шт.)</div>
+                              </div>
+                            </div>
+
+                            {/* Quick Buy Tickets Action */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setBuyTicketsModal({ isOpen: true, giveaway: g, count: 1 })}
+                                className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 hover:brightness-110 text-white font-bold text-xs shadow-md btn-press flex items-center justify-center gap-1.5"
+                              >
+                                <span>🎟️</span>
+                                <span>Купить билеты ({g.ticket_price} PTS)</span>
+                              </button>
+
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handlePickWinner(g.id)}
+                                  disabled={isPickingWinner}
+                                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md btn-press flex items-center gap-1"
+                                  title="Выбрать случайного победителя"
+                                >
+                                  <span>🎲</span>
+                                  <span>{isPickingWinner ? '...' : 'Выбрать'}</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -1000,6 +1218,17 @@
                     <span>+ Стрим</span>
                   </button>
                   <button
+                    onClick={() => {
+                      const defaultEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+                      setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: defaultEnd });
+                      setIsGiveawayModalOpen(true);
+                    }}
+                    className="p-3 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md btn-press"
+                  >
+                    <span>🎁</span>
+                    <span>+ Розыгрыш</span>
+                  </button>
+                  <button
                     onClick={() => { setIsVideosModalOpen(true); loadVideos(); }}
                     className="p-3 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 btn-press"
                   >
@@ -1015,11 +1244,96 @@
                   </button>
                   <button
                     onClick={() => setIsBroadcastModalOpen(true)}
-                    className="p-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-glow-live btn-press"
+                    className="col-span-2 p-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-glow-live btn-press"
                   >
                     <span>📢</span>
                     <span>Рассылка</span>
                   </button>
+                </div>
+
+                {/* GIVEAWAYS MANAGER CARD */}
+                <div className="p-4 rounded-2xl glass-panel space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎁</span>
+                      <div>
+                        <h4 className="font-bold text-white text-xs">Управление Розыгрышами</h4>
+                        <div className="text-[10px] text-slate-400">Настройка призов, лотерейных билетов и выбор победителя</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const defaultEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+                        setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: defaultEnd });
+                        setIsGiveawayModalOpen(true);
+                      }}
+                      className="text-xs text-amber-300 hover:text-white bg-amber-950/60 border border-amber-500/40 px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 btn-press"
+                    >
+                      <span>+</span>
+                      <span>Создать</span>
+                    </button>
+                  </div>
+
+                  {giveaways && giveaways.length > 0 ? (
+                    <div className="space-y-2.5 pt-1 border-t border-white/5">
+                      {giveaways.map(g => (
+                        <div key={g.id} className="p-3 rounded-xl bg-slate-950/80 border border-white/10 space-y-2 text-xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {g.image_url && <img src={g.image_url} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" alt="prize" />}
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-xs truncate">{g.title}</div>
+                                <div className="text-[10px] text-slate-400">
+                                  {g.status === 'active' ? `⏳ До ${new Date(g.end_time).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'Завершен'}
+                                </div>
+                              </div>
+                            </div>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                              g.status === 'active' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {g.status === 'active' ? 'Активен' : 'Завершен'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 bg-slate-900/60 p-2 rounded-lg text-[11px]">
+                            <div>Цена билета: <strong className="text-amber-400">{g.ticket_price} PTS</strong></div>
+                            <div>Куплено: <strong className="text-white">{g.total_tickets} шт. ({g.total_tickets * g.ticket_price} PTS)</strong></div>
+                          </div>
+
+                          {g.winner_name && (
+                            <div className="p-2 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center justify-between">
+                              <span>👑 Победитель: <strong>{g.winner_name}</strong></span>
+                              {g.winning_ticket_number && <span>Билет #{g.winning_ticket_number}</span>}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-white/5">
+                            {g.status === 'active' && (
+                              <button
+                                onClick={() => handlePickWinner(g.id)}
+                                disabled={isPickingWinner}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center gap-1 shadow-md btn-press"
+                              >
+                                <span>🎲</span>
+                                <span>Выбрать победителя</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteGiveaway(g.id)}
+                              className="px-2 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-lg text-xs font-bold"
+                              title="Удалить"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 text-[11px] text-slate-400 italic">
+                      Нет активных розыгрышей. Нажмите «+ Создать», чтобы запустить первый розыгрыш!
+                    </div>
+                  )}
                 </div>
 
                 {/* PROMO CODES GENERATOR & MANAGER */}
@@ -1852,6 +2166,250 @@
                     {twitchData && !twitchData.can_claim_daily ? '✓ Получено' : 'Забрать'}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* CREATE / EDIT GIVEAWAY MODAL (ADMIN) */}
+          {isGiveawayModalOpen && isAdmin && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎁</span>
+                    <h3 className="font-display font-bold text-base text-white">Новый Розыгрыш</h3>
+                  </div>
+                  <button
+                    onClick={() => setIsGiveawayModalOpen(false)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <form onSubmit={handleCreateGiveaway} className="space-y-3 text-xs">
+                  {/* Prize Title */}
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-semibold">Название приза *</label>
+                    <input
+                      type="text"
+                      value={newGiveaway.title}
+                      onChange={(e) => setNewGiveaway(p => ({ ...p, title: e.target.value }))}
+                      placeholder="Например: Telegram Premium 3 мес."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-semibold">Описание и условия</label>
+                    <textarea
+                      value={newGiveaway.description}
+                      onChange={(e) => setNewGiveaway(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Условия розыгрыша, как будет выдан приз..."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder:text-slate-500 h-16 resize-none"
+                    />
+                  </div>
+
+                  {/* Image URL / Upload */}
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-semibold">Обложка / Картинка приза</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={newGiveaway.image_url}
+                        onChange={(e) => setNewGiveaway(p => ({ ...p, image_url: e.target.value }))}
+                        placeholder="https://... или загрузите файл"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder:text-slate-500"
+                      />
+                      <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl cursor-pointer flex items-center justify-center font-bold">
+                        <span>📷</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const fd = new FormData();
+                            fd.append('file', file);
+                            try {
+                              showToast('Загрузка картинки...', 'info');
+                              const res = await fetch('/api/upload', {
+                                method: 'POST',
+                                headers: isTg && tg.initData ? { 'X-Telegram-Init-Data': tg.initData } : { 'X-Mock-Role': 'admin' },
+                                body: fd
+                              });
+                              if (res.ok) {
+                                const d = await res.json();
+                                setNewGiveaway(p => ({ ...p, image_url: d.url }));
+                                showToast('Картинка загружена!', 'success');
+                              }
+                            } catch(err) {
+                              showToast('Ошибка загрузки', 'error');
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Ticket Price & Max Tickets */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-slate-300 font-semibold">Цена билета (PTS) *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={newGiveaway.ticket_price}
+                        onChange={(e) => setNewGiveaway(p => ({ ...p, ticket_price: parseInt(e.target.value) || 100 }))}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-slate-300 font-semibold">Лимит на чел. (шт.)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newGiveaway.max_tickets_per_user}
+                        onChange={(e) => setNewGiveaway(p => ({ ...p, max_tickets_per_user: parseInt(e.target.value) || 0 }))}
+                        placeholder="0 = без лимита"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* End Time */}
+                  <div className="space-y-1">
+                    <label className="text-slate-300 font-semibold">Дата и время окончания *</label>
+                    <input
+                      type="datetime-local"
+                      value={newGiveaway.end_time}
+                      onChange={(e) => setNewGiveaway(p => ({ ...p, end_time: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 mt-2 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 hover:brightness-110 text-white font-bold text-xs shadow-lg btn-press flex items-center justify-center gap-1.5"
+                  >
+                    <span>🚀</span>
+                    <span>Запустить розыгрыш</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* BUY TICKETS MODAL (VIEWER) */}
+          {buyTicketsModal.isOpen && buyTicketsModal.giveaway && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎟️</span>
+                    <h3 className="font-display font-bold text-base text-white">Покупка билетов</h3>
+                  </div>
+                  <button
+                    onClick={() => setBuyTicketsModal({ isOpen: false, giveaway: null, count: 1 })}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex items-center gap-3">
+                  {buyTicketsModal.giveaway.image_url && (
+                    <img src={buyTicketsModal.giveaway.image_url} className="w-12 h-12 rounded-xl object-cover" alt="prize" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-bold text-white text-xs truncate">{buyTicketsModal.giveaway.title}</div>
+                    <div className="text-[10px] text-purple-300">
+                      Цена 1 билета: <strong className="text-amber-300">{buyTicketsModal.giveaway.ticket_price} PTS</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Count Selectors */}
+                <div className="space-y-1.5">
+                  <div className="text-xs text-slate-300 font-semibold">Выберите количество:</div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {[1, 5, 10].map(cnt => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => setBuyTicketsModal(p => ({ ...p, count: cnt }))}
+                        className={`p-2.5 rounded-xl border text-center font-bold btn-press ${
+                          buyTicketsModal.count === cnt
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-md'
+                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        {cnt} {cnt === 1 ? 'билет' : cnt < 5 ? 'билета' : 'билетов'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Summary & Cost */}
+                {(() => {
+                  const totalCost = buyTicketsModal.count * buyTicketsModal.giveaway.ticket_price;
+                  const currentBalance = user?.points_balance || 0;
+                  const canAfford = currentBalance >= totalCost;
+                  const currentTickets = buyTicketsModal.giveaway.user_tickets_count || 0;
+                  const maxLimit = buyTicketsModal.giveaway.max_tickets_per_user;
+                  const exceedsLimit = maxLimit && (currentTickets + buyTicketsModal.count > maxLimit);
+
+                  return (
+                    <div className="space-y-3 pt-1">
+                      <div className="bg-slate-950/80 p-3 rounded-xl border border-white/10 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-300">
+                          <span>Стоимость ({buyTicketsModal.count} шт.):</span>
+                          <span className="font-bold text-amber-300">{totalCost.toLocaleString('ru-RU')} PTS</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400 text-[11px]">
+                          <span>Ваш баланс:</span>
+                          <span className={canAfford ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                            {currentBalance.toLocaleString('ru-RU')} PTS
+                          </span>
+                        </div>
+                        {maxLimit && (
+                          <div className="text-[10px] text-slate-400 pt-1 border-t border-white/5">
+                            Куплено: {currentTickets}/{maxLimit} шт.
+                          </div>
+                        )}
+                      </div>
+
+                      {exceedsLimit ? (
+                        <div className="p-2 rounded-xl bg-rose-950/50 border border-rose-500/40 text-[11px] text-rose-300 text-center">
+                          Превышен лимит билетов на одного человека ({maxLimit} шт.)
+                        </div>
+                      ) : !canAfford ? (
+                        <div className="p-2 rounded-xl bg-rose-950/50 border border-rose-500/40 text-[11px] text-rose-300 text-center">
+                          Недостаточно баллов на балансе
+                        </div>
+                      ) : null}
+
+                      <button
+                        onClick={() => handleBuyTickets(buyTicketsModal.giveaway.id, buyTicketsModal.count)}
+                        disabled={isBuyingTickets || !canAfford || exceedsLimit}
+                        className={`w-full py-3 rounded-xl font-bold text-xs shadow-lg btn-press flex items-center justify-center gap-1.5 ${
+                          canAfford && !exceedsLimit
+                            ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 hover:brightness-110 text-white'
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        }`}
+                      >
+                        <span>🎟️</span>
+                        <span>{isBuyingTickets ? 'Покупка...' : `Оплатить ${totalCost.toLocaleString('ru-RU')} PTS`}</span>
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}

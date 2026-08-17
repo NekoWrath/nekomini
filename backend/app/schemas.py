@@ -137,3 +137,42 @@ class StreamerProfileUpdate(BaseModel):
     discord_url: Optional[str] = None
     donation_url: Optional[str] = None
     donation_title: Optional[str] = None
+
+
+# ==================== Giveaway & Tickets Schemas ====================
+class GiveawayBase(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    image_url: Optional[str] = None
+    ticket_price: int = 100
+    max_tickets_per_user: Optional[int] = 10
+    end_time: datetime.datetime
+
+class GiveawayCreate(GiveawayBase):
+    pass
+
+class GiveawayUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    ticket_price: Optional[int] = None
+    max_tickets_per_user: Optional[int] = None
+    end_time: Optional[datetime.datetime] = None
+    status: Optional[str] = None
+
+class GiveawayOut(GiveawayBase):
+    id: int
+    status: str  # active, completed, cancelled
+    winner_telegram_id: Optional[int] = None
+    winner_name: Optional[str] = None
+    winner_avatar: Optional[str] = None
+    winning_ticket_number: Optional[int] = None
+    total_tickets: int = 0
+    user_tickets_count: int = 0
+    user_win_chance_percent: float = 0.0
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class BuyTicketsRequest(BaseModel):
+    tickets_count: int = 1

@@ -182,3 +182,38 @@ class PromoCodeActivation(Base):
     __table_args__ = (
         UniqueConstraint("promo_code_id", "user_telegram_id", name="uq_user_promocode_activation"),
     )
+
+
+class Giveaway(Base):
+    __tablename__ = "giveaways"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, default="")
+    image_url = Column(String(1024), nullable=True)
+    ticket_price = Column(Integer, default=100, nullable=False)
+    max_tickets_per_user = Column(Integer, default=10, nullable=True)  # None = no limit
+    end_time = Column(DateTime, nullable=False)
+    status = Column(String(50), default="active")  # active, completed, cancelled
+    winner_telegram_id = Column(BigInteger, nullable=True)
+    winner_name = Column(String(255), nullable=True)
+    winner_avatar = Column(String(1024), nullable=True)
+    winning_ticket_number = Column(Integer, nullable=True)
+    total_tickets = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    tickets = relationship("GiveawayTicket", back_populates="giveaway", cascade="all, delete-orphan")
+
+
+class GiveawayTicket(Base):
+    __tablename__ = "giveaway_tickets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    giveaway_id = Column(Integer, ForeignKey("giveaways.id", ondelete="CASCADE"), index=True)
+    user_telegram_id = Column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), index=True)
+    ticket_number = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    giveaway = relationship("Giveaway", back_populates="tickets")
+    user = relationship("User")

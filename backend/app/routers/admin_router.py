@@ -173,7 +173,7 @@ import random
 import string
 from pydantic import BaseModel
 from typing import Optional
-from app.models import PromoCode, PromoCodeActivation
+from app.models import PromoCode, PromoCodeActivation, Giveaway, GiveawayTicket
 
 class GeneratePromoRequest(BaseModel):
     count: int = 1
@@ -368,6 +368,29 @@ async def export_backup_json(
         for p in promocodes
     ]
 
+    # 6. Giveaways
+    giveaway_res = await db.execute(select(Giveaway))
+    giveaways = giveaway_res.scalars().all()
+    giveaways_data = [
+        {
+            "id": g.id,
+            "title": g.title,
+            "description": g.description,
+            "image_url": g.image_url,
+            "ticket_price": g.ticket_price,
+            "max_tickets_per_user": g.max_tickets_per_user,
+            "end_time": g.end_time.isoformat() if g.end_time else None,
+            "status": g.status,
+            "winner_telegram_id": g.winner_telegram_id,
+            "winner_name": g.winner_name,
+            "winner_avatar": g.winner_avatar,
+            "winning_ticket_number": g.winning_ticket_number,
+            "total_tickets": g.total_tickets,
+            "created_at": g.created_at.isoformat() if g.created_at else None
+        }
+        for g in giveaways
+    ]
+
     backup_payload = {
         "version": "1.0",
         "exported_at": datetime.datetime.utcnow().isoformat(),
@@ -375,7 +398,8 @@ async def export_backup_json(
         "streams": streams_data,
         "suggestions": suggestions_data,
         "users": users_data,
-        "promocodes": promocodes_data
+        "promocodes": promocodes_data,
+        "giveaways": giveaways_data
     }
 
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -533,10 +557,39 @@ async def import_backup_json(
                     activations_count=p_data.get("activations_count", 0),
                     is_active=p_data.get("is_active", True)
                 )
-                db.add(promo)
+    # 6. Restore Giveaways
+    if "giveaways" in backup_data:
+        for g_data in backup_data["giveaways"]:
+            g_id = g_data.get("id")
+            g = None
+            if g_id:
+                g_res = await db.execute(select(Giveaway).where(Giveaway.id == g_id))
+                g = g_res.scalars().first()
+            if not g:
+                end_time_val = datetime.datetime.utcnow() + datetime.timedelta(days=3)
+                if g_data.get("end_time"):
+                    try:
+                        end_time_val = datetime.datetime.fromisoformat(g_data["end_time"])
+                    except Exception:
+                        pass
+                g = Giveaway(
+                    title=g_data.get("title", "Розыгрыш"),
+                    description=g_data.get("description", ""),
+                    image_url=g_data.get("image_url"),
+                    ticket_price=g_data.get("ticket_price", 100),
+                    max_tickets_per_user=g_data.get("max_tickets_per_user", 10),
+                    end_time=end_time_val,
+                    status=g_data.get("status", "active"),
+                    winner_telegram_id=g_data.get("winner_telegram_id"),
+                    winner_name=g_data.get("winner_name"),
+                    winner_avatar=g_data.get("winner_avatar"),
+                    winning_ticket_number=g_data.get("winning_ticket_number"),
+                    total_tickets=g_data.get("total_tickets", 0)
+                )
+                db.add(g)
 
     await db.commit()
     return {
         "success": True,
-        "message": f"Бэкап успешно применен! Восстановлено: {len(backup_data.get('streams', []))} стримов, {len(backup_data.get('suggestions', []))} предложений, {len(backup_data.get('promocodes', []))} кодов."
+        "message": f"Бэкап успешно применен! Восстановлено: {len(backup_data.get('streams', []))} стримов, {len(backup_data.get('suggestions', []))} предложений, {len(backup_data.get('promocodes', []))} кодов, {len(backup_data.get('giveaways', []))} розыгрышей."
     }
