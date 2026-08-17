@@ -68,7 +68,7 @@ class StreamOut(StreamBase):
 class SuggestionCreate(BaseModel):
     category: str = "other"  # game_idea, question, challenge, other
     title: str
-    content: str
+    content: Optional[str] = ""
     media_url: Optional[str] = None
 
 class SuggestionModerate(BaseModel):
@@ -83,7 +83,7 @@ class SuggestionOut(BaseModel):
     author_avatar: Optional[str] = None
     category: str
     title: str
-    content: str
+    content: Optional[str] = ""
     media_url: Optional[str] = None
     upvotes_count: int
     has_voted: bool = False

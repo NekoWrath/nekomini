@@ -78,7 +78,7 @@ class Suggestion(Base):
     
     category = Column(String(64), default="other")  # game_idea, question, challenge, other
     title = Column(String(255), nullable=False)
-    content = Column(Text, nullable=False)
+    content = Column(Text, nullable=True, default="")
     media_url = Column(String(1024), nullable=True)
     
     upvotes_count = Column(Integer, default=0, index=True)

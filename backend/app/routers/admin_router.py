@@ -131,3 +131,39 @@ async def update_streamer_profile(
     await db.commit()
     await db.refresh(prof)
     return prof
+
+
+@router.get("/videos")
+async def get_suggested_youtube_videos(
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Returns all suggestions that have a YouTube video attached."""
+    query = (
+        select(Suggestion)
+        .where(
+            Suggestion.media_url.isnot(None),
+            (Suggestion.media_url.ilike("%youtube.com%")) | (Suggestion.media_url.ilike("%youtu.be%"))
+        )
+        .order_by(Suggestion.created_at.desc())
+    )
+    result = await db.execute(query)
+    suggestions = result.scalars().all()
+
+    videos = []
+    for s in suggestions:
+        videos.append({
+            "id": s.id,
+            "title": s.title,
+            "content": s.content or "",
+            "media_url": s.media_url,
+            "author_name": s.author_name,
+            "author_username": s.author_username,
+            "author_avatar": s.author_avatar,
+            "upvotes_count": s.upvotes_count,
+            "status": s.status,
+            "admin_reply": s.admin_reply,
+            "created_at": s.created_at
+        })
+
+    return videos

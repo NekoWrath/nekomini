@@ -38,10 +38,7 @@ async def list_suggestions(
 
     # Tab filters & ordering
     if tab == "popular":
-        query = query.order_by(Suggestion.upvotes_count.desc(), Suggestion.created_at.desc())
-    elif tab == "answered":
-        query = query.where(Suggestion.status.in_(["accepted", "answered"]))
-        query = query.order_by(Suggestion.replied_at.desc(), Suggestion.created_at.desc())
+        query = query.where(Suggestion.status != "rejected").order_by(Suggestion.upvotes_count.desc(), Suggestion.created_at.desc())
     elif tab == "my":
         query = query.where(Suggestion.telegram_id == current_user.telegram_id)
         query = query.order_by(Suggestion.created_at.desc())
@@ -49,7 +46,7 @@ async def list_suggestions(
         query = query.where(Suggestion.status == "pending")
         query = query.order_by(Suggestion.created_at.desc())
     else:  # 'new'
-        query = query.order_by(Suggestion.created_at.desc())
+        query = query.where(Suggestion.status != "rejected").order_by(Suggestion.created_at.desc())
 
     result = await db.execute(query)
     suggestions = result.scalars().all()

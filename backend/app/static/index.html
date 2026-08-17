@@ -139,6 +139,18 @@
       answered: { label: 'Отвечено', badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30', icon: '💬' },
     };
 
+    function getYouTubeId(url) {
+      if (!url) return null;
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+    }
+
+    function isImageUrl(url) {
+      if (!url) return false;
+      return (/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i).test(url) || url.includes('imgur.com') || url.includes('images.unsplash.com');
+    }
+
     // Main App Component
     function App() {
       const isTg = Boolean(tg && tg.initData);
@@ -161,6 +173,8 @@
       const [isStreamModalOpen, setIsStreamModalOpen] = useState(false);
       const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
       const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+      const [isVideosModalOpen, setIsVideosModalOpen] = useState(false);
+      const [youtubeVideos, setYoutubeVideos] = useState([]);
       const [editingStream, setEditingStream] = useState(null);
       const [moderatingSug, setModeratingSug] = useState(null);
 
@@ -184,6 +198,13 @@
         }
         return headers;
       }, [isTg, mockRole]);
+
+      const loadVideos = useCallback(async () => {
+        try {
+          const res = await fetch('/api/admin/videos', { headers: getHeaders() });
+          if (res.ok) setYoutubeVideos(await res.json());
+        } catch(e) {}
+      }, [getHeaders]);
 
       // Load Data
       const loadAll = useCallback(async () => {
@@ -220,8 +241,9 @@
           fetch('/api/admin/stats', { headers: getHeaders() })
             .then(r => r.ok ? r.json() : null)
             .then(d => d && setAdminStats(d));
+          loadVideos();
         }
-      }, [activeTab, user?.role, mockRole, getHeaders]);
+      }, [activeTab, user?.role, mockRole, getHeaders, loadVideos]);
 
       // MainButton binding
       useEffect(() => {
@@ -521,17 +543,34 @@
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="grid grid-cols-4 gap-1 p-1 bg-slate-900 rounded-xl text-xs">
-                  {['new', 'popular', 'answered', 'my'].map(tabKey => (
-                    <button
-                      key={tabKey}
-                      onClick={() => setSugTab(tabKey)}
-                      className={`py-1 rounded-lg font-semibold capitalize ${sugTab === tabKey ? 'bg-purple-600 text-white' : 'text-slate-400'}`}
-                    >
-                      {tabKey === 'new' ? 'Новые' : tabKey === 'popular' ? 'Топ' : tabKey === 'answered' ? 'Ответы' : 'Мои'}
-                    </button>
-                  ))}
-                </div>
+                {(() => {
+                  const availableTabs = isAdmin
+                    ? [
+                        { id: 'pending', l: '⏳ Неотвеченные' },
+                        { id: 'new', l: 'Новые' },
+                        { id: 'popular', l: '🔥 Топ' },
+                        { id: 'my', l: 'Мои' },
+                      ]
+                    : [
+                        { id: 'new', l: 'Новые' },
+                        { id: 'popular', l: '🔥 Топ' },
+                        { id: 'my', l: 'Мои' },
+                      ];
+
+                  return (
+                    <div className={`grid ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} gap-1 p-1 bg-slate-900 rounded-xl text-xs`}>
+                      {availableTabs.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSugTab(t.id)}
+                          className={`py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${sugTab === t.id ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400'}`}
+                        >
+                          {t.l}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Suggestions List */}
                 <div className="space-y-3">
@@ -540,6 +579,7 @@
                       const cat = CATEGORIES[sug.category] || CATEGORIES.other;
                       const st = STATUSES[sug.status] || STATUSES.pending;
                       const canDelete = isAdmin || sug.is_author || sug.telegram_id === user?.telegram_id;
+                      const ytId = getYouTubeId(sug.media_url);
 
                       return (
                         <div key={sug.id} className="p-3.5 rounded-2xl glass-panel space-y-2">
@@ -560,7 +600,38 @@
                           </div>
 
                           <h4 className="font-display font-bold text-sm text-white">{sug.title}</h4>
-                          <p className="text-xs text-slate-300">{sug.content}</p>
+                          {sug.content && sug.content.trim() !== '' && (
+                            <p className="text-xs text-slate-300">{sug.content}</p>
+                          )}
+
+                          {/* Media Attachment */}
+                          {sug.media_url && (
+                            <div>
+                              {ytId ? (
+                                <div className="rounded-xl overflow-hidden aspect-video bg-black/60 border border-white/10 mt-1.5">
+                                  <iframe
+                                    src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+                                    className="w-full h-full"
+                                    title={sug.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                              ) : isImageUrl(sug.media_url) ? (
+                                <div className="rounded-xl overflow-hidden max-h-48 border border-white/10 mt-1.5">
+                                  <img src={sug.media_url} className="w-full h-full object-cover" alt="attachment" />
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => openLink(sug.media_url)}
+                                  className="text-[11px] text-purple-300 bg-purple-950/60 border border-purple-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 font-semibold mt-1"
+                                >
+                                  <span>🔗</span>
+                                  <span className="truncate max-w-[220px]">{sug.media_url}</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {sug.admin_reply && (
                             <div className="p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs italic text-slate-200">
@@ -607,7 +678,7 @@
                     <div className="p-8 rounded-2xl glass-panel text-center">
                       <div className="text-3xl mb-2">💡</div>
                       <div className="text-sm font-bold text-slate-200">В предложке пока пусто</div>
-                      <p className="text-xs text-slate-400 mt-1 mb-3">Будьте первым, кто предложит идею для стрима!</p>
+                      <p className="text-xs text-slate-400 mt-1 mb-3">Будьте первым, кто предложит идею или видео!</p>
                       <button
                         onClick={() => setIsSugModalOpen(true)}
                         className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-xs font-bold"
@@ -732,24 +803,31 @@
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => { setEditingStream(null); setIsStreamModalOpen(true); }}
-                    className="p-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 btn-press"
+                    className="p-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 btn-press"
                   >
                     <span>📅</span>
                     <span>+ Стрим</span>
                   </button>
                   <button
+                    onClick={() => { setIsVideosModalOpen(true); loadVideos(); }}
+                    className="p-3 rounded-xl bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 btn-press"
+                  >
+                    <span>🎬</span>
+                    <span>YouTube Видео</span>
+                  </button>
+                  <button
                     onClick={() => setIsProfileModalOpen(true)}
-                    className="p-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 btn-press"
+                    className="p-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 btn-press"
                   >
                     <span>⚙️</span>
                     <span>Соцсети & Донат</span>
                   </button>
                   <button
                     onClick={() => setIsBroadcastModalOpen(true)}
-                    className="p-2.5 rounded-xl bg-rose-600 text-white font-bold text-xs flex flex-col items-center justify-center gap-1 shadow-glow-live btn-press"
+                    className="p-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-glow-live btn-press"
                   >
                     <span>📢</span>
                     <span>Рассылка</span>
@@ -790,7 +868,7 @@
             <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
               <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
                 <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-white text-base">💡 Предложить идею</h3>
+                  <h3 className="font-bold text-white text-base">💡 Предложить идею / видео</h3>
                   <button onClick={() => setIsSugModalOpen(false)} className="text-slate-400">✕</button>
                 </div>
                 <form onSubmit={async (e) => {
@@ -798,8 +876,9 @@
                   const form = e.target;
                   const data = {
                     category: form.cat.value,
-                    title: form.title.value,
-                    content: form.content.value
+                    title: form.title.value.trim(),
+                    content: form.content.value.trim() || '',
+                    media_url: form.media_url.value.trim() || null
                   };
                   const res = await fetch('/api/suggestions', {
                     method: 'POST',
@@ -810,26 +889,32 @@
                     showToast('Идея отправлена!', 'success');
                     setIsSugModalOpen(false);
                     loadAll();
+                  } else {
+                    showToast('Ошибка отправки идеи', 'error');
                   }
                 }} className="space-y-3 text-xs">
                   <div>
                     <label className="block text-slate-300 font-semibold mb-1">Категория</label>
-                    <select name="cat" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white">
+                    <select name="cat" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white">
                       <option value="game_idea">🎮 Идея для игры</option>
                       <option value="question">❓ Вопрос стримеру</option>
                       <option value="challenge">🔥 Челлендж</option>
-                      <option value="other">💬 Другое</option>
+                      <option value="other">🎬 Видео / Другое</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Заголовок</label>
-                    <input name="title" required placeholder="Например: Пройти Outlast без смертей" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white" />
+                    <label className="block text-slate-300 font-semibold mb-1">Заголовок / Название</label>
+                    <input name="title" required placeholder="Например: Посмотреть этот клип на стриме" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Описание</label>
-                    <textarea name="content" required rows="3" placeholder="Подробно опишите идею..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white resize-none" />
+                    <label className="block text-slate-300 font-semibold mb-1">Ссылка на YouTube видео или картинку (необязательно)</label>
+                    <input name="media_url" placeholder="https://youtube.com/watch?v=... или ссылка на фото" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white" />
                   </div>
-                  <button type="submit" className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Описание (необязательно)</label>
+                    <textarea name="content" rows="2" placeholder="Комментарий или подробности..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white resize-none" />
+                  </div>
+                  <button type="submit" className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl btn-press">
                     Отправить в предложку
                   </button>
                 </form>
@@ -1011,6 +1096,98 @@
                     Запустить рассылку ботом
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* YOUTUBE VIDEOS VAULT MODAL (ADMIN) */}
+          {isVideosModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/85 flex items-end sm:items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-5 w-full max-w-lg space-y-4 my-auto max-h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between items-center sticky top-0 bg-slate-900 pt-1 pb-2 border-b border-white/5 z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎬</span>
+                    <div>
+                      <h3 className="font-bold text-white text-base">Предложенные YouTube Видео</h3>
+                      <div className="text-[11px] text-slate-400">Всего видеороликов: {youtubeVideos.length}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsVideosModalOpen(false)} className="text-slate-400 text-sm p-1">✕</button>
+                </div>
+
+                {youtubeVideos.length === 0 ? (
+                  <div className="p-8 text-center glass-panel rounded-2xl">
+                    <div className="text-3xl mb-2">📭</div>
+                    <div className="text-sm font-bold text-slate-200">Нет предложенных видео</div>
+                    <p className="text-xs text-slate-400 mt-1">Зрители еще не предлагали ссылки на YouTube.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {youtubeVideos.map(vid => {
+                      const ytId = getYouTubeId(vid.media_url);
+                      const st = STATUSES[vid.status] || STATUSES.pending;
+                      return (
+                        <div key={vid.id} className="p-3.5 rounded-2xl glass-panel-elevated border border-white/10 space-y-2.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-white truncate max-w-[220px]">{vid.title}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${st.badge}`}>
+                              {st.icon} {st.label}
+                            </span>
+                          </div>
+
+                          {ytId && (
+                            <div className="rounded-xl overflow-hidden aspect-video bg-black/80 border border-white/10">
+                              <iframe
+                                src={`https://www.youtube-nocookie.com/embed/${ytId}`}
+                                className="w-full h-full"
+                                title={vid.title}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            </div>
+                          )}
+
+                          {vid.content && (
+                            <p className="text-xs text-slate-300 italic">«{vid.content}»</p>
+                          )}
+
+                          <div className="flex items-center justify-between text-xs pt-1 border-t border-white/5">
+                            <div className="text-slate-400 text-[11px]">
+                              От: <span className="text-slate-200 font-semibold">{vid.author_name}</span> • 🔥 {vid.upvotes_count}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => openLink(vid.media_url)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded-lg text-xs font-semibold"
+                              >
+                                ▶️ YouTube
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setModeratingSug(vid);
+                                  setIsVideosModalOpen(false);
+                                }}
+                                className="bg-purple-600 hover:bg-purple-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold"
+                              >
+                                Модерация
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  await deleteSuggestion(vid.id);
+                                  loadVideos();
+                                }}
+                                className="bg-rose-500/20 text-rose-300 px-2 py-1 rounded-lg text-xs font-bold"
+                                title="Удалить"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
