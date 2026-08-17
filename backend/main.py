@@ -18,6 +18,7 @@ from app.routers.suggestions_router import router as suggestions_router
 from app.routers.settings_router import router as settings_router
 from app.routers.admin_router import router as admin_router
 from app.routers.upload_router import router as upload_router
+from app.routers.twitch_router import router as twitch_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +51,30 @@ async def start_bot_polling():
         logger.error(f"❌ Telegram bot failed to start: {e}")
 
 
+from sqlalchemy import text
+
+async def run_db_migrations():
+    """Safely adds missing columns to existing SQLite tables."""
+    new_user_columns = [
+        ("points_balance", "INTEGER DEFAULT 500"),
+        ("twitch_id", "VARCHAR(255)"),
+        ("twitch_username", "VARCHAR(255)"),
+        ("twitch_display_name", "VARCHAR(255)"),
+        ("twitch_avatar", "VARCHAR(1024)"),
+        ("twitch_access_token", "VARCHAR(1024)"),
+        ("last_daily_bonus", "DATETIME")
+    ]
+    try:
+        async with engine.begin() as conn:
+            for col_name, col_type in new_user_columns:
+                try:
+                    await conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type};"))
+                except Exception:
+                    pass  # Column already exists
+    except Exception as e:
+        logger.warning(f"Migration check: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. Initialize Database Tables
@@ -57,6 +82,7 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+        await run_db_migrations()
         await seed_initial_data()
         logger.info("✅ Database tables initialized successfully!")
     except Exception as e:
@@ -115,6 +141,7 @@ app.include_router(suggestions_router)
 app.include_router(settings_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
+app.include_router(twitch_router)
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

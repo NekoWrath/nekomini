@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     VK_URL: str = os.getenv("VK_URL", "https://live.vkvideo.ru/streamer")
     TELEGRAM_CHANNEL: str = os.getenv("TELEGRAM_CHANNEL", "https://t.me/streamer_channel")
     
+    # Twitch OAuth & API Credentials
+    TWITCH_CLIENT_ID: str = os.getenv("TWITCH_CLIENT_ID", "")
+    TWITCH_CLIENT_SECRET: str = os.getenv("TWITCH_CLIENT_SECRET", "")
+    TWITCH_REDIRECT_URI: str = os.getenv("TWITCH_REDIRECT_URI", "")
+    TWITCH_BROADCASTER_ID: str = os.getenv("TWITCH_BROADCASTER_ID", "")
+
     DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "True").lower() in ("true", "1", "t")
     DATABASE_URL: str = "sqlite+aiosqlite:///./tma_streamer.db"
     

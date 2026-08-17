@@ -255,6 +255,11 @@ async def export_backup_json(
             "last_name": u.last_name,
             "photo_url": u.photo_url,
             "role": u.role,
+            "points_balance": u.points_balance or 0,
+            "twitch_id": u.twitch_id,
+            "twitch_username": u.twitch_username,
+            "twitch_display_name": u.twitch_display_name,
+            "twitch_avatar": u.twitch_avatar,
             "notify_stream_start": u.notify_stream_start,
             "notify_announcements": u.notify_announcements,
             "notify_answers": u.notify_answers
@@ -312,7 +317,7 @@ async def import_backup_json(
     admin_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Imports and restores streams, suggestions, profile, and users from JSON backup."""
+    """Imports and restores streams, suggestions, profile, points, and users from JSON backup."""
     # 1. Restore Profile
     if "streamer_profile" in backup_data and backup_data["streamer_profile"]:
         prof_data = backup_data["streamer_profile"]
@@ -341,6 +346,11 @@ async def import_backup_json(
                     last_name=u_data.get("last_name"),
                     photo_url=u_data.get("photo_url"),
                     role=u_data.get("role", "viewer"),
+                    points_balance=u_data.get("points_balance", 500),
+                    twitch_id=u_data.get("twitch_id"),
+                    twitch_username=u_data.get("twitch_username"),
+                    twitch_display_name=u_data.get("twitch_display_name"),
+                    twitch_avatar=u_data.get("twitch_avatar"),
                     notify_stream_start=u_data.get("notify_stream_start", True),
                     notify_announcements=u_data.get("notify_announcements", True),
                     notify_answers=u_data.get("notify_answers", True)
@@ -349,6 +359,13 @@ async def import_backup_json(
             else:
                 user.first_name = u_data.get("first_name", user.first_name)
                 user.username = u_data.get("username", user.username)
+                if "points_balance" in u_data:
+                    user.points_balance = u_data["points_balance"]
+                if "twitch_username" in u_data and u_data["twitch_username"]:
+                    user.twitch_username = u_data["twitch_username"]
+                    user.twitch_display_name = u_data.get("twitch_display_name", u_data["twitch_username"])
+                    user.twitch_id = u_data.get("twitch_id", user.twitch_id)
+                    user.twitch_avatar = u_data.get("twitch_avatar", user.twitch_avatar)
                 if u_data.get("role"):
                     user.role = u_data.get("role")
 

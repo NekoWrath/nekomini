@@ -15,6 +15,17 @@ class User(Base):
     photo_url = Column(String(1024), nullable=True)
     role = Column(String(50), default="viewer")  # viewer, moderator, admin
     
+    # Points & Economy
+    points_balance = Column(Integer, default=500)
+    
+    # Twitch Account Linking
+    twitch_id = Column(String(255), nullable=True, index=True)
+    twitch_username = Column(String(255), nullable=True, index=True)
+    twitch_display_name = Column(String(255), nullable=True)
+    twitch_avatar = Column(String(1024), nullable=True)
+    twitch_access_token = Column(String(1024), nullable=True)
+    last_daily_bonus = Column(DateTime, nullable=True)
+
     # Notification preferences
     notify_stream_start = Column(Boolean, default=True)
     notify_announcements = Column(Boolean, default=True)

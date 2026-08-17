@@ -178,6 +178,13 @@
       const [editingStream, setEditingStream] = useState(null);
       const [moderatingSug, setModeratingSug] = useState(null);
 
+      // Twitch & Points Wallet Modal States
+      const [isTwitchModalOpen, setIsTwitchModalOpen] = useState(false);
+      const [twitchData, setTwitchData] = useState(null);
+      const [manualTwitchInput, setManualTwitchInput] = useState('');
+      const [isSyncingPoints, setIsSyncingPoints] = useState(false);
+      const [isClaimingBonus, setIsClaimingBonus] = useState(false);
+
       const [toast, setToast] = useState(null);
 
       const showToast = (text, type = 'info') => {
@@ -198,6 +205,7 @@
             last_name: u.last_name,
             username: u.username,
             photo_url: u.photo_url,
+            points_balance: 500,
             role: 'viewer'
           });
         }
@@ -216,6 +224,97 @@
         }
         return headers;
       }, [isTg, mockRole]);
+
+      const loadWallet = useCallback(async () => {
+        try {
+          const res = await fetch('/api/twitch/wallet', { headers: getHeaders() });
+          if (res.ok) {
+            const d = await res.json();
+            setTwitchData(d);
+            setUser(prev => prev ? { ...prev, points_balance: d.points_balance, twitch_username: d.twitch_username, twitch_avatar: d.twitch_avatar } : prev);
+          }
+        } catch(e) {}
+      }, [getHeaders]);
+
+      const handleOAuthTwitch = async () => {
+        try {
+          haptic.impact('medium');
+          const res = await fetch('/api/twitch/auth-url', { headers: getHeaders() });
+          if (res.ok) {
+            const { auth_url } = await res.json();
+            openLink(auth_url);
+          }
+        } catch(e) {
+          showToast('Ошибка запуска авторизации Twitch', 'error');
+        }
+      };
+
+      const handleManualTwitchLink = async (e) => {
+        e.preventDefault();
+        if (!manualTwitchInput.trim()) return;
+        try {
+          haptic.impact('medium');
+          const res = await fetch('/api/twitch/link-manual', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ twitch_username: manualTwitchInput.trim() })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(data.message, 'success');
+            setManualTwitchInput('');
+            loadWallet();
+          } else {
+            showToast(data.detail || 'Ошибка привязки', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка привязки Twitch', 'error');
+        }
+      };
+
+      const handleSyncChannelPoints = async () => {
+        try {
+          setIsSyncingPoints(true);
+          haptic.impact('medium');
+          const res = await fetch('/api/twitch/sync-points', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(data.message, 'success');
+            loadWallet();
+          } else {
+            showToast(data.detail || 'Ошибка обмена', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка синхронизации баллов', 'error');
+        } finally {
+          setIsSyncingPoints(false);
+        }
+      };
+
+      const handleClaimDailyBonus = async () => {
+        try {
+          setIsClaimingBonus(true);
+          haptic.impact('medium');
+          const res = await fetch('/api/twitch/daily-bonus', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(data.message, 'success');
+            loadWallet();
+          } else {
+            showToast(data.detail || 'Ошибка получения бонуса', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка получения бонуса', 'error');
+        } finally {
+          setIsClaimingBonus(false);
+        }
+      };
 
       const loadVideos = useCallback(async () => {
         try {
@@ -407,19 +506,34 @@
               </div>
             </div>
 
-            {user && (
-              <div className="bg-slate-800/80 border border-slate-700 px-2.5 py-1 rounded-xl text-xs flex items-center gap-2">
-                {user.photo_url ? (
-                  <img src={user.photo_url} className="w-5 h-5 rounded-full object-cover" alt="user" />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
-                    {(user.first_name || 'U')[0].toUpperCase()}
-                  </div>
-                )}
-                <span className="font-semibold text-slate-200">{user.first_name || 'Зритель'}</span>
-                {isAdmin && <span className="text-[9px] bg-rose-500/30 text-rose-300 font-bold px-1.5 py-0.5 rounded">ADMIN</span>}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Points & Twitch Wallet Button */}
+              <button
+                onClick={() => {
+                  loadWallet();
+                  setIsTwitchModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-purple-950 via-indigo-950 to-purple-900 border border-purple-500/40 hover:border-purple-400 px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 font-bold text-amber-300 shadow-sm btn-press"
+              >
+                <span>💰</span>
+                <span>{(user?.points_balance || 0).toLocaleString('ru-RU')}</span>
+                <span className="text-[9px] text-purple-200 bg-purple-900/80 px-1 py-0.5 rounded">+</span>
+              </button>
+
+              {user && (
+                <div className="bg-slate-800/80 border border-slate-700 px-2 py-1 rounded-xl text-xs flex items-center gap-1.5">
+                  {user.photo_url ? (
+                    <img src={user.photo_url} className="w-4 h-4 rounded-full object-cover" alt="user" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[9px] font-bold text-white">
+                      {(user.first_name || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <span className="font-semibold text-slate-200 truncate max-w-[65px]">{user.first_name || 'Зритель'}</span>
+                  {isAdmin && <span className="text-[8px] bg-rose-500/30 text-rose-300 font-bold px-1 py-0.5 rounded">ADMIN</span>}
+                </div>
+              )}
+            </div>
           </header>
 
           {/* MAIN TAB CONTENT */}
@@ -1417,6 +1531,158 @@
                     💾 Сохранить настройки профиля
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* TWITCH & POINTS WALLET MODAL */}
+          {isTwitchModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-4 my-auto max-h-[90vh] overflow-y-auto no-scrollbar shadow-2xl">
+                <div className="flex justify-between items-center sticky top-0 bg-slate-900 pt-1 pb-2 border-b border-white/5 z-10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💰</span>
+                    <div>
+                      <h3 className="font-bold text-white text-base">Баллы & Twitch Аккаунт</h3>
+                      <p className="text-[10px] text-purple-300">Баланс очков зрителя и синхронизация</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsTwitchModalOpen(false)} className="text-slate-400 hover:text-white text-sm p-1">✕</button>
+                </div>
+
+                {/* Balance Card */}
+                <div className="p-4 rounded-2xl bg-gradient-to-tr from-purple-950 via-indigo-950 to-slate-900 border border-purple-500/40 text-center space-y-1 shadow-lg">
+                  <div className="text-[11px] text-purple-300 uppercase tracking-wider font-semibold">Ваш баланс в приложении</div>
+                  <div className="text-3xl font-extrabold text-amber-400 font-display flex items-center justify-center gap-2">
+                    <span>{(user?.points_balance || 0).toLocaleString('ru-RU')}</span>
+                    <span className="text-sm text-purple-200">PTS</span>
+                  </div>
+                </div>
+
+                {/* Twitch Account Status */}
+                <div className="p-4 rounded-2xl glass-panel space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🟣</span>
+                      <span className="font-bold text-xs text-white">Twitch Аккаунт</span>
+                    </div>
+                    {user?.twitch_username ? (
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                        ✓ Привязан
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                        Не привязан
+                      </span>
+                    )}
+                  </div>
+
+                  {user?.twitch_username ? (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-purple-950/40 border border-purple-500/20">
+                      <div className="flex items-center gap-2.5">
+                        {user.twitch_avatar ? (
+                          <img src={user.twitch_avatar} className="w-8 h-8 rounded-full object-cover border border-purple-400" alt="twitch" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-xs font-bold text-white">
+                            {user.twitch_username[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-xs text-white">@{user.twitch_username}</div>
+                          <div className="text-[10px] text-purple-300">Привязан к Telegram</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleOAuthTwitch()}
+                        className="text-[11px] text-purple-300 hover:text-white bg-purple-900/60 px-2.5 py-1 rounded-lg font-semibold"
+                      >
+                        Сменить
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <p className="text-[11px] text-slate-300">
+                        Привяжите ваш аккаунт Twitch, чтобы обменивать баллы канала и получить <strong>+250 приветственных очков</strong>!
+                      </p>
+                      {/* Direct OAuth Button */}
+                      <button
+                        onClick={() => handleOAuthTwitch()}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#9146FF] to-[#772ce8] hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg btn-press"
+                      >
+                        <span>🟣</span>
+                        <span>Войти через Twitch (OAuth)</span>
+                      </button>
+
+                      {/* Manual Username Fallback */}
+                      <form onSubmit={handleManualTwitchLink} className="flex gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={manualTwitchInput}
+                          onChange={(e) => setManualTwitchInput(e.target.value)}
+                          placeholder="Или введите никнейм Twitch..."
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                        <button
+                          type="submit"
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl btn-press"
+                        >
+                          ОК
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+
+                {/* Exchange Channel Points & Daily Bonus */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Channel Points Sync */}
+                  <button
+                    onClick={handleSyncChannelPoints}
+                    disabled={isSyncingPoints || !user?.twitch_username}
+                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between btn-press ${
+                      user?.twitch_username
+                        ? 'bg-gradient-to-br from-indigo-950/70 to-purple-950/70 border-indigo-500/40 hover:border-indigo-400'
+                        : 'bg-slate-950/50 border-slate-800 opacity-60 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="text-base">🔄</span>
+                      <span className="text-[9px] bg-purple-500/20 text-purple-300 font-bold px-1.5 py-0.5 rounded">
+                        Баллы Канала
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-xs">Обменять баллы</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {isSyncingPoints ? 'Синхронизация...' : '+1 000 очков с Twitch'}
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Daily Bonus */}
+                  <button
+                    onClick={handleClaimDailyBonus}
+                    disabled={isClaimingBonus || (twitchData && !twitchData.can_claim_daily)}
+                    className={`p-3 rounded-2xl border text-left flex flex-col justify-between btn-press ${
+                      !twitchData || twitchData.can_claim_daily
+                        ? 'bg-gradient-to-br from-amber-950/60 to-rose-950/60 border-amber-500/40 hover:border-amber-400'
+                        : 'bg-slate-950/50 border-slate-800 opacity-60 cursor-not-allowed'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full mb-1">
+                      <span className="text-base">🎁</span>
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded">
+                        Каждые 24ч
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-xs">Ежедневный бонус</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {twitchData && !twitchData.can_claim_daily ? 'Получено сегодня' : '+100 очков в подарок'}
+                      </div>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
           )}
