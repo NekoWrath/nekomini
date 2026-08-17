@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     TELEGRAM_CHANNEL: str = os.getenv("TELEGRAM_CHANNEL", "https://t.me/streamer_channel")
     
     DEBUG_MODE: bool = os.getenv("DEBUG_MODE", "True").lower() in ("true", "1", "t")
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tma_streamer.db")
+    DATABASE_URL: str = "sqlite+aiosqlite:///./tma_streamer.db"
     
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("PORT", os.getenv("API_PORT", "8000")))
