@@ -13,12 +13,16 @@ TWITCH_HELIX_USERS_URL = "https://api.twitch.tv/helix/users"
 TWITCH_HELIX_REDEMPTIONS_URL = "https://api.twitch.tv/helix/channel_points/custom_rewards/redemptions"
 
 
-def get_oauth_url(telegram_id: int) -> str:
+def get_oauth_url(telegram_id: int) -> Optional[str]:
     """
     Generates Twitch OAuth 2.0 authorization redirect URL.
+    Returns None if TWITCH_CLIENT_ID is not configured.
     """
-    client_id = settings.TWITCH_CLIENT_ID or "gp762nuuoqcoxypju8c569th9wz7q5"
-    redirect_uri = settings.TWITCH_REDIRECT_URI
+    client_id = settings.TWITCH_CLIENT_ID.strip()
+    if not client_id:
+        return None
+
+    redirect_uri = settings.TWITCH_REDIRECT_URI.strip()
     if not redirect_uri:
         base_url = settings.WEBAPP_URL.rstrip("/")
         redirect_uri = f"{base_url}/api/twitch/callback"

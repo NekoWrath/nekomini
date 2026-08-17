@@ -33,9 +33,12 @@ class WalletStateResponse(BaseModel):
 async def get_twitch_auth_url(
     current_user: User = Depends(get_current_user)
 ):
-    """Returns the Twitch OAuth authorization URL for the user."""
+    """Returns the Twitch OAuth authorization URL for the user if configured."""
     url = get_oauth_url(current_user.telegram_id)
-    return {"auth_url": url}
+    return {
+        "is_configured": url is not None,
+        "auth_url": url
+    }
 
 
 @router.get("/callback", response_class=HTMLResponse)
@@ -73,7 +76,7 @@ async def twitch_oauth_callback(
         user_res = await db.execute(select(User).where(User.telegram_id == telegram_id))
         user = user_res.scalars().first()
         if user and user_info:
-            first_time = not user.twitch_id
+            first_time = not user.twitch_username
             user.twitch_id = user_info.get("id")
             user.twitch_username = user_info.get("login")
             user.twitch_display_name = user_info.get("display_name")
@@ -153,7 +156,7 @@ async def link_twitch_manual(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Fallback manual Twitch username linking."""
+    """Direct 1-click Twitch username linking with avatar lookup."""
     username = req.twitch_username.strip().lstrip("@").lower()
     if not username:
         raise HTTPException(status_code=400, detail="Укажите корректный никнейм на Twitch")
@@ -161,6 +164,7 @@ async def link_twitch_manual(
     first_time = not current_user.twitch_username
     current_user.twitch_username = username
     current_user.twitch_display_name = username
+    current_user.twitch_avatar = f"https://unavatar.io/twitch/{username}"
 
     if first_time:
         current_user.points_balance = (current_user.points_balance or 0) + 250
@@ -172,7 +176,8 @@ async def link_twitch_manual(
         "success": True,
         "points_balance": current_user.points_balance,
         "twitch_username": current_user.twitch_username,
-        "message": f"Twitch @{username} успешно привязан! +250 баллов начислено." if first_time else f"Twitch @{username} обновлен."
+        "twitch_avatar": current_user.twitch_avatar,
+        "message": f"Twitch @{username} успешно привязан к вашему Telegram! +250 баллов начислено." if first_time else f"Twitch @{username} обновлен."
     }
 
 

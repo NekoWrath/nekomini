@@ -1578,56 +1578,63 @@
                   </div>
 
                   {user?.twitch_username ? (
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-purple-950/40 border border-purple-500/20">
-                      <div className="flex items-center gap-2.5">
-                        {user.twitch_avatar ? (
-                          <img src={user.twitch_avatar} className="w-8 h-8 rounded-full object-cover border border-purple-400" alt="twitch" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-purple-700 flex items-center justify-center text-xs font-bold text-white">
-                            {user.twitch_username[0].toUpperCase()}
+                    <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-500/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          {user.twitch_avatar ? (
+                            <img src={user.twitch_avatar} className="w-9 h-9 rounded-full object-cover border-2 border-purple-400 shadow-md" alt="twitch" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-xs font-bold text-white border border-purple-400">
+                              {user.twitch_username[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bold text-xs text-white flex items-center gap-1">
+                              <span>@{user.twitch_username}</span>
+                              <span className="text-[10px] text-emerald-400">✓</span>
+                            </div>
+                            <div className="text-[10px] text-purple-300">Привязан к Telegram ({user.telegram_id})</div>
                           </div>
-                        )}
-                        <div>
-                          <div className="font-bold text-xs text-white">@{user.twitch_username}</div>
-                          <div className="text-[10px] text-purple-300">Привязан к Telegram</div>
                         </div>
+                        <button
+                          onClick={() => {
+                            setManualTwitchInput(user.twitch_username);
+                            setUser(p => ({ ...p, twitch_username: null }));
+                          }}
+                          className="text-[11px] text-slate-400 hover:text-rose-300 bg-slate-800/80 px-2 py-1 rounded-lg"
+                        >
+                          Сменить
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleOAuthTwitch()}
-                        className="text-[11px] text-purple-300 hover:text-white bg-purple-900/60 px-2.5 py-1 rounded-lg font-semibold"
-                      >
-                        Сменить
-                      </button>
                     </div>
                   ) : (
-                    <div className="space-y-2.5">
-                      <p className="text-[11px] text-slate-300">
-                        Привяжите ваш аккаунт Twitch, чтобы обменивать баллы канала и получить <strong>+250 приветственных очков</strong>!
+                    <div className="space-y-3">
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Введите ваш никнейм на Twitch, чтобы связать его с Telegram и получить <strong>+250 приветственных очков</strong>:
                       </p>
-                      {/* Direct OAuth Button */}
-                      <button
-                        onClick={() => handleOAuthTwitch()}
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#9146FF] to-[#772ce8] hover:brightness-110 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg btn-press"
-                      >
-                        <span>🟣</span>
-                        <span>Войти через Twitch (OAuth)</span>
-                      </button>
 
-                      {/* Manual Username Fallback */}
-                      <form onSubmit={handleManualTwitchLink} className="flex gap-2 pt-1">
-                        <input
-                          type="text"
-                          value={manualTwitchInput}
-                          onChange={(e) => setManualTwitchInput(e.target.value)}
-                          placeholder="Или введите никнейм Twitch..."
-                          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                        />
-                        <button
-                          type="submit"
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl btn-press"
-                        >
-                          ОК
-                        </button>
+                      {/* 1-Click Fast Username Linking */}
+                      <form onSubmit={handleManualTwitchLink} className="space-y-2">
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-2.5 text-purple-400 font-bold text-xs">@</span>
+                            <input
+                              type="text"
+                              value={manualTwitchInput}
+                              onChange={(e) => setManualTwitchInput(e.target.value)}
+                              placeholder="twitch_username"
+                              className="w-full bg-slate-950 border border-purple-500/40 focus:border-purple-400 rounded-xl pl-7 pr-3 py-2.5 text-xs text-white placeholder:text-slate-500"
+                              required
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg btn-press flex items-center gap-1"
+                          >
+                            <span>🔗</span>
+                            <span>Привязать</span>
+                          </button>
+                        </div>
                       </form>
                     </div>
                   )}
