@@ -234,6 +234,52 @@ async def cmd_help(message: Message):
         "• /schedule — Расписание ближайших стримов\n"
         "• /suggest — Как предложить идею или вопрос\n"
         "• /admin — Панель стримера (только для админов)\n"
+        "• /backup — Выгрузить резервную копию базы данных (.db)\n"
         "• /help — Справка по боту"
     )
     await message.answer(text=text)
+
+
+import os
+import datetime
+from aiogram.types import FSInputFile
+
+@router.message(Command("backup"))
+async def cmd_backup(message: Message):
+    """Sends current SQLite database file and summary to Admin."""
+    is_admin = message.from_user.id in settings.admin_ids
+    if not is_admin:
+        async with AsyncSessionLocal() as db:
+            u_res = await db.execute(select(User).where(User.telegram_id == message.from_user.id))
+            u = u_res.scalars().first()
+            if not u or u.role != "admin":
+                await message.answer("⛔️ Команда доступна только администраторам.")
+                return
+
+    db_path = "tma_streamer.db"
+    if not os.path.exists(db_path):
+        if os.path.exists("../tma_streamer.db"):
+            db_path = "../tma_streamer.db"
+        elif os.path.exists("backend/tma_streamer.db"):
+            db_path = "backend/tma_streamer.db"
+
+    if not os.path.exists(db_path):
+        await message.answer("⚠️ Файл базы данных не найден на диске.")
+        return
+
+    async with AsyncSessionLocal() as db:
+        users_count = await db.scalar(select(func.count(User.telegram_id))) or 0
+        streams_count = await db.scalar(select(func.count(Stream.id))) or 0
+        sug_count = await db.scalar(select(func.count(Suggestion.id))) or 0
+
+    now_str = datetime.datetime.utcnow().strftime("%d.%m.%Y %H:%M")
+    caption = (
+        f"📦 <b>Резервная копия базы данных ({now_str} UTC)</b>\n\n"
+        f"👥 Пользователей: {users_count}\n"
+        f"📅 Стримов: {streams_count}\n"
+        f"💡 Идей в предложке: {sug_count}\n\n"
+        f"<i>Сохраните этот файл. В случае необходимости отправьте его боту с подписью <code>/restore</code> для моментального восстановления!</i>"
+    )
+
+    doc = FSInputFile(db_path, filename=f"tma_streamer_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M')}.db")
+    await message.answer_document(document=doc, caption=caption)
