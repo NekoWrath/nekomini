@@ -12,6 +12,9 @@ class UserBase(BaseModel):
 
 class UserOut(UserBase):
     role: str
+    points_balance: int = 500
+    twitch_username: Optional[str] = None
+    last_daily_bonus: Optional[datetime.datetime] = None
     notify_stream_start: bool
     notify_announcements: bool
     notify_answers: bool
@@ -165,3 +168,39 @@ class AuctionStateOut(BaseModel):
     items: List[AuctionItemOut]
     total_points: int
     active_count: int
+
+
+# ==================== Wallet & Telegram Stars Schemas ====================
+class StarsPackage(BaseModel):
+    id: str
+    stars: int
+    points: int
+    title: str
+    bonus_label: Optional[str] = None
+    badge_color: Optional[str] = None
+
+class CreateStarsInvoiceRequest(BaseModel):
+    package_id: str
+
+class InvoiceLinkResponse(BaseModel):
+    invoice_link: str
+    package: StarsPackage
+
+class LinkTwitchRequest(BaseModel):
+    twitch_username: str
+
+class ClaimTwitchPointsRequest(BaseModel):
+    points: int = 1000
+
+class DailyBonusResponse(BaseModel):
+    success: bool
+    points_credited: int
+    new_balance: int
+    message: str
+
+class WalletStateOut(BaseModel):
+    points_balance: int
+    twitch_username: Optional[str] = None
+    packages: List[StarsPackage]
+    can_claim_daily: bool
+    next_daily_at: Optional[datetime.datetime] = None

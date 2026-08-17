@@ -237,3 +237,77 @@ async def cmd_help(message: Message):
         "• /help — Справка по боту"
     )
     await message.answer(text=text)
+
+
+# ==================== Telegram Stars Payments ====================
+
+@router.pre_checkout_query()
+async def process_pre_checkout(query):
+    """Answers pre-checkout query to approve Telegram Stars payment."""
+    try:
+        await query.answer(ok=True)
+    except Exception:
+        await query.answer(ok=False, error_message="Ошибка при проверке заказа. Попробуйте еще раз.")
+
+
+@router.message(F.successful_payment)
+async def process_successful_payment(message: Message):
+    """Handles successful payment via Telegram Stars (XTR)."""
+    payment = message.successful_payment
+    stars = payment.total_amount
+    payload = payment.invoice_payload or ""
+    charge_id = payment.telegram_payment_charge_id or ""
+
+    # Determine points credit
+    if "stars_500" in payload or stars >= 500:
+        points = 35000
+    elif "stars_250" in payload or stars >= 250:
+        points = 15000
+    elif "stars_100" in payload or stars >= 100:
+        points = 5500
+    elif "stars_50" in payload or stars >= 50:
+        points = 2500
+    else:
+        points = stars * 50
+
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(User).where(User.telegram_id == message.from_user.id))
+        user = res.scalars().first()
+        if user:
+            user.points_balance = (user.points_balance or 0) + points
+            
+            from app.models import PaymentTransaction
+            tx = PaymentTransaction(
+                telegram_id=user.telegram_id,
+                provider="telegram_stars",
+                stars_amount=stars,
+                points_credited=points,
+                payload=payload,
+                telegram_payment_charge_id=charge_id,
+                status="completed"
+            )
+            db.add(tx)
+            await db.commit()
+            new_bal = user.points_balance
+        else:
+            new_bal = points
+
+    webapp_url = get_clean_webapp_url()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🎰 Перейти в Рулетку",
+                web_app=WebAppInfo(url=f"{webapp_url}#auction")
+            )
+        ]
+    ])
+
+    await message.answer(
+        text=(
+            f"🎉 <b>Оплата успешна!</b>\n\n"
+            f"Вам начислено: <b>+{points:,} баллов</b> ⭐\n"
+            f"💰 Ваш текущий баланс: <b>{new_bal:,} очков</b>\n\n"
+            f"Теперь вы можете делать ставки и заказывать игры в Рулетке!"
+        ),
+        reply_markup=keyboard
+    )

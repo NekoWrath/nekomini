@@ -67,13 +67,23 @@ async def create_auction_item(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Adds a new item/game/movie to the auction."""
+    """Adds a new item/game/movie to the auction using wallet points."""
+    points = max(100, item_in.points)
+
+    # Check user balance for non-admins
+    if current_user.role != "admin":
+        if (current_user.points_balance or 0) < points:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Недостаточно баллов на балансе ({current_user.points_balance or 0} из {points}). Пополните кошелёк через Звёзды ⭐ или Twitch!"
+            )
+        current_user.points_balance -= points
+
     user_name = item_in.user_name or current_user.first_name
     if current_user.last_name and not item_in.user_name:
         user_name += f" {current_user.last_name}"
 
     color = item_in.color or random.choice(SECTOR_COLORS)
-    points = max(100, item_in.points)
 
     new_item = AuctionItem(
         title=item_in.title.strip(),
@@ -105,13 +115,22 @@ async def add_points_to_item(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Adds channel points to an existing auction item (increases sector size)."""
+    """Adds channel points from wallet to an existing auction item."""
     result = await db.execute(select(AuctionItem).where(AuctionItem.id == item_id))
     item = result.scalars().first()
     if not item:
         raise HTTPException(status_code=404, detail="Лот не найден")
 
-    item.points = max(100, item.points + payload.points)
+    points_to_add = max(1, payload.points)
+    if current_user.role != "admin":
+        if (current_user.points_balance or 0) < points_to_add:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Недостаточно баллов на балансе ({current_user.points_balance or 0} из {points_to_add}). Пополните кошелёк через Звёзды ⭐ или Twitch!"
+            )
+        current_user.points_balance -= points_to_add
+
+    item.points = item.points + points_to_add
     item.is_active = True  # Reactivate if points added
     await db.commit()
     await db.refresh(item)
