@@ -56,23 +56,32 @@ async def start_bot_polling():
 async def lifespan(app: FastAPI):
     # 1. Initialize Database Tables
     logger.info("Initializing database tables...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        await seed_initial_data()
+        logger.info("✅ Database tables initialized successfully!")
+    except Exception as e:
+        logger.error(f"⚠️ Warning: Could not initialize database tables: {e}")
 
-    # 2. Seed initial demo data
-    await seed_initial_data()
+    # 2. Start Background Scheduler (15-30m stream push alerts)
+    try:
+        start_scheduler()
+    except Exception as e:
+        logger.error(f"⚠️ Scheduler warning: {e}")
 
-    # 3. Start Background Scheduler (15-30m stream push alerts)
-    start_scheduler()
-
-    # 4. Start Telegram Bot in background
+    # 3. Start Telegram Bot in background
     global bot_task
     bot_task = asyncio.create_task(start_bot_polling())
 
     yield
 
     # Shutdown sequence
-    shutdown_scheduler()
+    try:
+        shutdown_scheduler()
+    except Exception:
+        pass
+
     if bot_task and not bot_task.done():
         bot_task.cancel()
         try:
