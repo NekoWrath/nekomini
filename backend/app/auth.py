@@ -85,8 +85,12 @@ async def get_current_user(
         last_name = ""
         photo_url = None
 
-    # Determine user role
-    role = "admin" if telegram_id in settings.admin_ids else "viewer"
+    # Determine user role: auto-grant admin to users in admin_ids OR the first user of the app
+    admin_count_res = await db.execute(select(func.count(User.telegram_id)).where(User.role == "admin"))
+    admin_count = admin_count_res.scalar() or 0
+
+    is_admin_user = telegram_id in settings.admin_ids or admin_count == 0
+    role = "admin" if is_admin_user else "viewer"
     if settings.DEBUG_MODE and x_mock_role in ("admin", "moderator", "viewer"):
         role = x_mock_role
 
@@ -101,14 +105,20 @@ async def get_current_user(
             first_name=first_name,
             last_name=last_name,
             photo_url=photo_url,
+            points_balance=500,
             role=role
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
     else:
-        # Update user profile info on login
+        # If user is in admin_ids or first user, ensure admin role
         updated = False
+        if is_admin_user and user.role != "admin":
+            user.role = "admin"
+            updated = True
+
+        # Update user profile info on login
         if user.username != username:
             user.username = username
             updated = True
