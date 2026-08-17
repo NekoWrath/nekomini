@@ -80,3 +80,15 @@ async def get_me(
             "donation_title": prof.donation_title or "Поддержать на DonateX",
         }
     )
+
+
+@router.post("/claim-streamer-admin")
+async def claim_streamer_admin(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Allows the streamer/owner to activate admin role instantly."""
+    current_user.role = "admin"
+    await db.commit()
+    await db.refresh(current_user)
+    return {"status": "ok", "role": "admin"}

@@ -85,11 +85,16 @@ async def get_current_user(
         last_name = ""
         photo_url = None
 
-    # Determine user role: auto-grant admin to users in admin_ids OR the first user of the app
-    admin_count_res = await db.execute(select(func.count(User.telegram_id)).where(User.role == "admin"))
-    admin_count = admin_count_res.scalar() or 0
+    # Determine user role: auto-grant admin to users in admin_ids OR the first real user
+    admin_count_res = await db.execute(
+        select(func.count(User.telegram_id)).where(
+            User.role == "admin",
+            User.telegram_id.not_in([123456789, 987654321])
+        )
+    )
+    real_admin_count = admin_count_res.scalar() or 0
 
-    is_admin_user = telegram_id in settings.admin_ids or admin_count == 0
+    is_admin_user = telegram_id in settings.admin_ids or real_admin_count == 0
     role = "admin" if is_admin_user else "viewer"
     if settings.DEBUG_MODE and x_mock_role in ("admin", "moderator", "viewer"):
         role = x_mock_role
@@ -112,26 +117,29 @@ async def get_current_user(
         await db.commit()
         await db.refresh(user)
     else:
-        # If user is in admin_ids or first user, ensure admin role
         updated = False
+        # If user is admin in DB, preserve it! If eligible for admin, grant it!
         if is_admin_user and user.role != "admin":
             user.role = "admin"
             updated = True
+        elif user.role == "admin":
+            # Keep admin
+            pass
+        elif user.role != role and not (settings.DEBUG_MODE and x_mock_role):
+            user.role = role
+            updated = True
 
         # Update user profile info on login
-        if user.username != username:
+        if user.username != username and username:
             user.username = username
             updated = True
-        if user.first_name != first_name:
+        if user.first_name != first_name and first_name:
             user.first_name = first_name
             updated = True
         if user.photo_url != photo_url and photo_url:
             user.photo_url = photo_url
             updated = True
-        if user.role != role and not (settings.DEBUG_MODE and x_mock_role):
-            user.role = role
-            updated = True
-        elif settings.DEBUG_MODE and x_mock_role and user.role != x_mock_role:
+        if settings.DEBUG_MODE and x_mock_role and user.role != x_mock_role:
             user.role = x_mock_role
             updated = True
 

@@ -90,7 +90,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
+    const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
     // Telegram API Helpers
     const tg = window.Telegram?.WebApp;
@@ -1437,6 +1437,29 @@
                     </div>
                   );
                 })()}
+
+                {/* Streamer Admin Activation button if not yet admin */}
+                {!isAdmin && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/auth/claim-streamer-admin', {
+                          method: 'POST',
+                          headers: getHeaders()
+                        });
+                        if (res.ok) {
+                          showToast('Права Администратора активированы! 👑', 'success');
+                          setUser(p => ({ ...p, role: 'admin' }));
+                          setActiveTab('admin');
+                        }
+                      } catch(e) {}
+                    }}
+                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-indigo-900/60 to-purple-900/60 border border-purple-500/40 hover:border-purple-400 text-purple-200 font-bold text-xs flex items-center justify-center gap-2 shadow-sm btn-press"
+                  >
+                    <span>👑</span>
+                    <span>Включить панель Стримера / Админа</span>
+                  </button>
+                )}
               </div>
             )}
 
