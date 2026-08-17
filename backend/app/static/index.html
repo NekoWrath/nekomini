@@ -177,6 +177,9 @@
       const [youtubeVideos, setYoutubeVideos] = useState([]);
       const [editingStream, setEditingStream] = useState(null);
       const [moderatingSug, setModeratingSug] = useState(null);
+      const [modStatus, setModStatus] = useState('accepted');
+      const [modReply, setModReply] = useState('');
+      const [isSubmittingMod, setIsSubmittingMod] = useState(false);
 
       // Twitch & Points Wallet Modal States
       const [isTwitchModalOpen, setIsTwitchModalOpen] = useState(false);
@@ -426,12 +429,32 @@
         }
       };
 
+      const getDefaultGiveawayEndTime = (daysAhead = 3) => {
+        const d = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+
       const handleCreateGiveaway = async (e) => {
         if (e) e.preventDefault();
-        if (!newGiveaway.title.trim() || !newGiveaway.end_time) {
-          showToast('Укажите название приза и дату окончания', 'error');
+        if (!newGiveaway.title || !newGiveaway.title.trim()) {
+          showToast('Укажите название приза', 'error');
           return;
         }
+
+        let isoDate = null;
+        if (newGiveaway.end_time) {
+          try {
+            const parsed = new Date(newGiveaway.end_time);
+            if (!isNaN(parsed.getTime())) {
+              isoDate = parsed.toISOString();
+            }
+          } catch(err) {}
+        }
+        if (!isoDate) {
+          isoDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
         try {
           haptic.impact('medium');
           const res = await fetch('/api/admin/giveaways', {
@@ -439,24 +462,56 @@
             headers: getHeaders(),
             body: JSON.stringify({
               title: newGiveaway.title.trim(),
-              description: newGiveaway.description,
-              image_url: newGiveaway.image_url,
-              ticket_price: parseInt(newGiveaway.ticket_price) || 100,
-              max_tickets_per_user: parseInt(newGiveaway.max_tickets_per_user) || null,
-              end_time: new Date(newGiveaway.end_time).toISOString()
+              description: newGiveaway.description || '',
+              image_url: newGiveaway.image_url || null,
+              ticket_price: Math.max(1, parseInt(newGiveaway.ticket_price) || 100),
+              max_tickets_per_user: parseInt(newGiveaway.max_tickets_per_user) > 0 ? parseInt(newGiveaway.max_tickets_per_user) : null,
+              end_time: isoDate
             })
           });
           const data = await res.json();
           if (res.ok) {
             showToast('Розыгрыш успешно запущен!', 'success');
             setIsGiveawayModalOpen(false);
-            setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: '' });
+            setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: getDefaultGiveawayEndTime(3) });
             loadGiveaways();
           } else {
             showToast(data.detail || 'Ошибка создания розыгрыша', 'error');
           }
         } catch(e) {
           showToast('Ошибка создания розыгрыша', 'error');
+        }
+      };
+
+      const openModerationModal = (sug) => {
+        setModeratingSug(sug);
+        setModStatus(sug.status === 'pending' ? 'accepted' : sug.status);
+        setModReply(sug.admin_reply || '');
+      };
+
+      const submitModeration = async (e) => {
+        if (e) e.preventDefault();
+        if (!moderatingSug) return;
+        try {
+          setIsSubmittingMod(true);
+          haptic.impact('medium');
+          const res = await fetch(`/api/suggestions/${moderatingSug.id}/moderate`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ status: modStatus, admin_reply: modReply })
+          });
+          if (res.ok) {
+            showToast('Статус обновлен, автор уведомлен!', 'success');
+            setModeratingSug(null);
+            loadAll();
+          } else {
+            const d = await res.json();
+            showToast(d.detail || 'Ошибка сохранения', 'error');
+          }
+        } catch(e) {
+          showToast('Ошибка модерации', 'error');
+        } finally {
+          setIsSubmittingMod(false);
         }
       };
 
@@ -1062,7 +1117,7 @@
                               )}
                               {isAdmin && (
                                 <button
-                                  onClick={() => setModeratingSug(sug)}
+                                  onClick={() => openModerationModal(sug)}
                                   className="bg-slate-800 text-purple-300 border border-purple-500/30 px-2 py-1 rounded text-xs font-semibold"
                                 >
                                   Модерация
@@ -1626,53 +1681,86 @@
 
           {/* ADMIN MODERATE MODAL */}
           {moderatingSug && (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4">
-              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md space-y-3">
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-5 w-full max-w-md max-h-[85vh] overflow-y-auto no-scrollbar shadow-2xl space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-white text-base">🛡️ Модерация</h3>
-                  <button onClick={() => setModeratingSug(null)} className="text-slate-400">✕</button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🛡️</span>
+                    <h3 className="font-bold text-white text-base">Модерация идеи</h3>
+                  </div>
+                  <button onClick={() => setModeratingSug(null)} className="text-slate-400 hover:text-white p-1 rounded-lg text-lg">✕</button>
                 </div>
-                <div className="p-2 bg-slate-950 rounded-xl text-xs">
-                  <div className="font-bold text-white">{moderatingSug.title}</div>
-                  <div className="text-slate-400 mt-0.5">{moderatingSug.content}</div>
+
+                <div className="p-3 bg-slate-950/80 border border-white/10 rounded-2xl text-xs space-y-1">
+                  <div className="font-bold text-white text-sm">{moderatingSug.title}</div>
+                  {moderatingSug.content && <div className="text-slate-300 text-xs">{moderatingSug.content}</div>}
+                  <div className="text-[10px] text-purple-400 pt-1 flex items-center gap-1">
+                    <span>Автор:</span>
+                    <strong>{moderatingSug.author_name}</strong>
+                  </div>
                 </div>
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target;
-                  const res = await fetch(`/api/suggestions/${moderatingSug.id}/moderate`, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({ status: form.status.value, admin_reply: form.reply.value })
-                  });
-                  if (res.ok) {
-                    showToast('Статус обновлен, автор уведомлен!', 'success');
-                    setModeratingSug(null);
-                    loadAll();
-                  }
-                }} className="space-y-3 text-xs">
+
+                <form onSubmit={submitModeration} className="space-y-3 text-xs">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Решение</label>
-                    <select name="status" defaultValue="accepted" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white">
+                    <label className="block text-slate-300 font-semibold mb-1">Решение стримера:</label>
+                    <select
+                      value={modStatus}
+                      onChange={(e) => setModStatus(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white"
+                    >
                       <option value="accepted">✅ Взять на стрим</option>
-                      <option value="answered">💬 Ответить</option>
+                      <option value="answered">💬 Ответить зрителю</option>
                       <option value="rejected">❌ Отклонить</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Ответ (уйдет автору в ЛС через бота):</label>
-                    <textarea name="reply" rows="2" placeholder="Ответ стримера..." className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white resize-none" />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-300 font-semibold">Ответ (уйдет автору в ЛС бота):</label>
+                    </div>
+
+                    {/* Quick Reply Chips */}
+                    <div className="flex gap-1 overflow-x-auto pb-1.5 no-scrollbar text-[10px]">
+                      {['Беру на стрим! 🔥', 'Спасибо за крутую идею! 👍', 'Отличный челлендж 🎮', 'Уже проходили на стриме 👀'].map(chip => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => setModReply(chip)}
+                          className="px-2 py-1 bg-purple-950/60 border border-purple-500/30 text-purple-300 rounded-lg whitespace-nowrap btn-press"
+                        >
+                          {chip}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      value={modReply}
+                      onChange={(e) => setModReply(e.target.value)}
+                      rows="3"
+                      placeholder="Напишите ответ для автора..."
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white resize-none"
+                    />
                   </div>
-                  <div className="flex gap-2 pt-1">
-                    <button type="submit" className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs btn-press">
-                      💾 Сохранить и отправить пуш
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSubmittingMod}
+                      className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg btn-press flex items-center justify-center gap-1.5"
+                    >
+                      <span>💾</span>
+                      <span>{isSubmittingMod ? 'Сохранение...' : 'Сохранить и отправить пуш'}</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => deleteSuggestion(moderatingSug.id)}
-                      className="px-3 py-2.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold rounded-xl text-xs btn-press"
+                      onClick={() => {
+                        deleteSuggestion(moderatingSug.id);
+                        setModeratingSug(null);
+                      }}
+                      className="px-3.5 py-3 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold rounded-xl text-xs btn-press"
                       title="Удалить навсегда"
                     >
-                      🗑️ Удалить
+                      🗑️
                     </button>
                   </div>
                 </form>
@@ -1866,7 +1954,7 @@
                               </button>
                               <button
                                 onClick={() => {
-                                  setModeratingSug(vid);
+                                  openModerationModal(vid);
                                   setIsVideosModalOpen(false);
                                 }}
                                 className="bg-purple-600 hover:bg-purple-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold"
@@ -2282,14 +2370,36 @@
                     </div>
                   </div>
 
-                  {/* End Time */}
-                  <div className="space-y-1">
-                    <label className="text-slate-300 font-semibold">Дата и время окончания *</label>
+                  {/* End Time & Quick Presets */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-300 font-semibold">Длительность / Окончание *</label>
+                    </div>
+
+                    {/* Quick Duration Buttons */}
+                    <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                      {[
+                        { label: '1 день', days: 1 },
+                        { label: '3 дня', days: 3 },
+                        { label: '7 дней', days: 7 },
+                        { label: '14 дней', days: 14 }
+                      ].map(preset => (
+                        <button
+                          key={preset.days}
+                          type="button"
+                          onClick={() => setNewGiveaway(p => ({ ...p, end_time: getDefaultGiveawayEndTime(preset.days) }))}
+                          className="py-1.5 px-1 bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-center font-bold btn-press"
+                        >
+                          +{preset.label}
+                        </button>
+                      ))}
+                    </div>
+
                     <input
                       type="datetime-local"
                       value={newGiveaway.end_time}
                       onChange={(e) => setNewGiveaway(p => ({ ...p, end_time: e.target.value }))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs mt-1"
                       required
                     />
                   </div>

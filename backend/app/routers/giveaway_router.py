@@ -207,13 +207,17 @@ async def create_giveaway(
     db: AsyncSession = Depends(get_db)
 ):
     """Creates a new giveaway."""
+    end_time_val = req.end_time
+    if hasattr(end_time_val, "tzinfo") and end_time_val.tzinfo is not None:
+        end_time_val = end_time_val.replace(tzinfo=None)
+
     giveaway = Giveaway(
         title=req.title.strip(),
         description=req.description or "",
         image_url=req.image_url,
         ticket_price=max(1, req.ticket_price),
         max_tickets_per_user=req.max_tickets_per_user if (req.max_tickets_per_user and req.max_tickets_per_user > 0) else None,
-        end_time=req.end_time,
+        end_time=end_time_val,
         status="active",
         total_tickets=0
     )
@@ -265,7 +269,10 @@ async def update_giveaway(
     if req.max_tickets_per_user is not None:
         g.max_tickets_per_user = req.max_tickets_per_user if req.max_tickets_per_user > 0 else None
     if req.end_time is not None:
-        g.end_time = req.end_time
+        end_time_val = req.end_time
+        if hasattr(end_time_val, "tzinfo") and end_time_val.tzinfo is not None:
+            end_time_val = end_time_val.replace(tzinfo=None)
+        g.end_time = end_time_val
     if req.status is not None:
         g.status = req.status
 

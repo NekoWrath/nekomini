@@ -111,13 +111,20 @@ async def create_suggestion(
     await db.commit()
     await db.refresh(new_sug)
 
-    # Add auto-vote from creator
-    auto_vote = SuggestionVote(
-        telegram_id=current_user.telegram_id,
-        suggestion_id=new_sug.id
+    # Add auto-vote from creator if not exists
+    v_res = await db.execute(
+        select(SuggestionVote).where(
+            SuggestionVote.telegram_id == current_user.telegram_id,
+            SuggestionVote.suggestion_id == new_sug.id
+        )
     )
-    db.add(auto_vote)
-    await db.commit()
+    if not v_res.scalars().first():
+        auto_vote = SuggestionVote(
+            telegram_id=current_user.telegram_id,
+            suggestion_id=new_sug.id
+        )
+        db.add(auto_vote)
+        await db.commit()
 
     return SuggestionOut(
         id=new_sug.id,
