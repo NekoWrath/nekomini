@@ -181,26 +181,66 @@ async def link_twitch_manual(
     }
 
 
-@router.post("/sync-points")
-async def sync_twitch_channel_points(
+from app.models import PromoCode, PromoCodeActivation
+
+class ActivateCodeRequest(BaseModel):
+    code: str
+
+@router.post("/activate-code")
+async def activate_promocode(
+    req: ActivateCodeRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Synchronizes Twitch channel points rewards and adds points to balance."""
-    if not current_user.twitch_username:
-        raise HTTPException(status_code=400, detail="Сначала привяжите ваш аккаунт Twitch")
+    """Activates a promo code / stream secret code and grants points to the user."""
+    code_str = req.code.strip().upper()
+    if not code_str:
+        raise HTTPException(status_code=400, detail="Введите код для активации")
 
-    # In production, this verifies Twitch Helix Channel Points Redemptions
-    awarded_points = 1000
-    current_user.points_balance = (current_user.points_balance or 0) + awarded_points
+    res = await db.execute(select(PromoCode).where(PromoCode.code == code_str))
+    promo = res.scalars().first()
+    if not promo or not promo.is_active:
+        raise HTTPException(status_code=404, detail="Код не существует или уже был использован")
+
+    if promo.activations_count >= promo.max_activations:
+        promo.is_active = False
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Этот код уже использован максимальное количество раз")
+
+    # Check if user already activated this code
+    act_res = await db.execute(
+        select(PromoCodeActivation).where(
+            PromoCodeActivation.promo_code_id == promo.id,
+            PromoCodeActivation.user_telegram_id == current_user.telegram_id
+        )
+    )
+    if act_res.scalars().first():
+        raise HTTPException(status_code=400, detail="Вы уже активировали этот код!")
+
+    # Record activation
+    activation = PromoCodeActivation(
+        promo_code_id=promo.id,
+        user_telegram_id=current_user.telegram_id,
+        points_added=promo.points_reward
+    )
+    db.add(activation)
+
+    # Increment activations
+    promo.activations_count += 1
+    if promo.activations_count >= promo.max_activations:
+        promo.is_active = False
+
+    # Add points to user balance
+    current_user.points_balance = (current_user.points_balance or 0) + promo.points_reward
+
     await db.commit()
     await db.refresh(current_user)
 
     return {
         "success": True,
-        "awarded_points": awarded_points,
+        "points_added": promo.points_reward,
         "points_balance": current_user.points_balance,
-        "message": f"🎉 Успешно обменяли баллы Twitch на +{awarded_points:,} очков в приложении!"
+        "message": f"🎉 Код {promo.code} успешно активирован! +{promo.points_reward:,} очков добавлено на баланс!"
     }
 
 

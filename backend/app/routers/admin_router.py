@@ -169,6 +169,92 @@ async def get_suggested_youtube_videos(
     return videos
 
 
+import random
+import string
+from pydantic import BaseModel
+from typing import Optional
+from app.models import PromoCode, PromoCodeActivation
+
+class GeneratePromoRequest(BaseModel):
+    count: int = 1
+    points_reward: int = 1000
+    max_activations: int = 1
+    prefix: Optional[str] = "NEKO"
+
+@router.get("/promocodes")
+async def list_promocodes(
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Returns list of all generated promo codes."""
+    res = await db.execute(select(PromoCode).order_by(PromoCode.created_at.desc()))
+    codes = res.scalars().all()
+    return [
+        {
+            "id": c.id,
+            "code": c.code,
+            "points_reward": c.points_reward,
+            "max_activations": c.max_activations,
+            "activations_count": c.activations_count,
+            "is_active": c.is_active,
+            "created_at": c.created_at.strftime("%d.%m.%Y %H:%M") if c.created_at else ""
+        }
+        for c in codes
+    ]
+
+
+@router.post("/promocodes/generate")
+async def generate_promocodes(
+    req: GeneratePromoRequest,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generates one or multiple unique single-use or multi-use promo codes."""
+    generated = []
+    prefix = (req.prefix or "NEKO").strip().upper().replace(" ", "")
+    count = max(1, min(req.count, 50))  # Between 1 and 50
+
+    for _ in range(count):
+        rand_suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        code_str = f"{prefix}-{rand_suffix}"
+        
+        promo = PromoCode(
+            code=code_str,
+            points_reward=max(10, req.points_reward),
+            max_activations=max(1, req.max_activations),
+            activations_count=0,
+            is_active=True
+        )
+        db.add(promo)
+        generated.append(code_str)
+
+    await db.commit()
+    return {
+        "success": True,
+        "count": len(generated),
+        "codes": generated,
+        "points_reward": req.points_reward,
+        "message": f"Сгенерировано {len(generated)} кодов на {req.points_reward} PTS!"
+    }
+
+
+@router.delete("/promocodes/{promo_id}")
+async def delete_promocode(
+    promo_id: int,
+    admin_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Deletes a promo code."""
+    res = await db.execute(select(PromoCode).where(PromoCode.id == promo_id))
+    promo = res.scalars().first()
+    if not promo:
+        raise HTTPException(status_code=404, detail="Промокод не найден")
+
+    await db.delete(promo)
+    await db.commit()
+    return {"success": True, "message": "Промокод удален"}
+
+
 import os
 import json
 import datetime
@@ -267,13 +353,29 @@ async def export_backup_json(
         for u in users
     ]
 
+    # 5. Promocodes
+    promo_res = await db.execute(select(PromoCode))
+    promocodes = promo_res.scalars().all()
+    promocodes_data = [
+        {
+            "code": p.code,
+            "points_reward": p.points_reward,
+            "max_activations": p.max_activations,
+            "activations_count": p.activations_count,
+            "is_active": p.is_active,
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        }
+        for p in promocodes
+    ]
+
     backup_payload = {
         "version": "1.0",
         "exported_at": datetime.datetime.utcnow().isoformat(),
         "streamer_profile": profile_data,
         "streams": streams_data,
         "suggestions": suggestions_data,
-        "users": users_data
+        "users": users_data,
+        "promocodes": promocodes_data
     }
 
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -415,10 +517,26 @@ async def import_backup_json(
                     status=sg_data.get("status", "pending"),
                     admin_reply=sg_data.get("admin_reply")
                 )
-                db.add(sug)
+    # 5. Restore Promocodes
+    if "promocodes" in backup_data:
+        for p_data in backup_data["promocodes"]:
+            p_code = p_data.get("code")
+            if not p_code:
+                continue
+            pr_res = await db.execute(select(PromoCode).where(PromoCode.code == p_code))
+            promo = pr_res.scalars().first()
+            if not promo:
+                promo = PromoCode(
+                    code=p_code,
+                    points_reward=p_data.get("points_reward", 1000),
+                    max_activations=p_data.get("max_activations", 1),
+                    activations_count=p_data.get("activations_count", 0),
+                    is_active=p_data.get("is_active", True)
+                )
+                db.add(promo)
 
     await db.commit()
     return {
         "success": True,
-        "message": f"Бэкап успешно применен! Восстановлено: {len(backup_data.get('streams', []))} стримов, {len(backup_data.get('suggestions', []))} предложений."
+        "message": f"Бэкап успешно применен! Восстановлено: {len(backup_data.get('streams', []))} стримов, {len(backup_data.get('suggestions', []))} предложений, {len(backup_data.get('promocodes', []))} кодов."
     }

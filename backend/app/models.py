@@ -151,3 +151,34 @@ class StreamerProfile(Base):
     donation_title = Column(String(255), default="Поддержать на DonateX")
     
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    code = Column(String(64), unique=True, index=True, nullable=False)
+    points_reward = Column(Integer, default=1000, nullable=False)
+    max_activations = Column(Integer, default=1, nullable=False)  # 1 = single use one-time code
+    activations_count = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    activations = relationship("PromoCodeActivation", back_populates="promo_code", cascade="all, delete-orphan")
+
+
+class PromoCodeActivation(Base):
+    __tablename__ = "promo_code_activations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    promo_code_id = Column(Integer, ForeignKey("promo_codes.id", ondelete="CASCADE"), index=True)
+    user_telegram_id = Column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), index=True)
+    points_added = Column(Integer, nullable=False)
+    activated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    promo_code = relationship("PromoCode", back_populates="activations")
+
+    __table_args__ = (
+        UniqueConstraint("promo_code_id", "user_telegram_id", name="uq_user_promocode_activation"),
+    )
