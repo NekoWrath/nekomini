@@ -20,12 +20,6 @@ class User(Base):
     notify_announcements = Column(Boolean, default=True)
     notify_answers = Column(Boolean, default=True)
     
-    # Points & Wallet
-    points_balance = Column(Integer, default=500, nullable=False)
-    twitch_username = Column(String(255), nullable=True)
-    twitch_user_id = Column(String(255), nullable=True)
-    last_daily_bonus = Column(DateTime, nullable=True)
-
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
@@ -33,7 +27,6 @@ class User(Base):
     suggestions = relationship("Suggestion", back_populates="author", cascade="all, delete-orphan")
     votes = relationship("SuggestionVote", back_populates="user", cascade="all, delete-orphan")
     reminders = relationship("StreamReminder", back_populates="user", cascade="all, delete-orphan")
-    transactions = relationship("PaymentTransaction", back_populates="user", cascade="all, delete-orphan")
 
 
 class Stream(Base):
@@ -147,31 +140,3 @@ class StreamerProfile(Base):
     donation_title = Column(String(255), default="Поддержать на DonateX")
     
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-
-
-class AuctionItem(Base):
-    __tablename__ = "auction_items"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    title = Column(String(255), nullable=False)
-    user_name = Column(String(255), default="Зритель")
-    points = Column(Integer, default=1000, nullable=False)
-    color = Column(String(32), default="#9333ea")
-    is_active = Column(Boolean, default=True)  # True = on wheel, False = eliminated
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-
-class PaymentTransaction(Base):
-    __tablename__ = "payment_transactions"
-
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    telegram_id = Column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), index=True)
-    provider = Column(String(32), default="telegram_stars")  # telegram_stars, twitch, daily_bonus
-    stars_amount = Column(Integer, default=0)
-    points_credited = Column(Integer, nullable=False)
-    payload = Column(String(255), nullable=True)
-    telegram_payment_charge_id = Column(String(255), nullable=True)
-    status = Column(String(32), default="completed")  # pending, completed, failed
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    user = relationship("User", back_populates="transactions")

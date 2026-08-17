@@ -18,8 +18,6 @@ from app.routers.suggestions_router import router as suggestions_router
 from app.routers.settings_router import router as settings_router
 from app.routers.admin_router import router as admin_router
 from app.routers.upload_router import router as upload_router
-from app.routers.auction_router import router as auction_router
-from app.routers.wallet_router import router as wallet_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +45,7 @@ async def start_bot_polling():
 
         dp.include_router(bot_router)
         logger.info("🚀 Telegram Bot polling started (aiogram 3.x)...")
-        await dp.start_polling(bot, allowed_updates=["message", "callback_query", "pre_checkout_query"])
+        await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
     except Exception as e:
         logger.error(f"❌ Telegram bot failed to start: {e}")
 
@@ -117,8 +115,6 @@ app.include_router(suggestions_router)
 app.include_router(settings_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
-app.include_router(auction_router)
-app.include_router(wallet_router)
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse

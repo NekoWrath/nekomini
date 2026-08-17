@@ -16,6 +16,6 @@ services:
       - key: DEBUG_MODE
         value: "False"
       - key: DATABASE_URL
-        sync: false
+        value: sqlite+aiosqlite:///./tma_streamer.db
       - key: API_PORT
         value: 10000

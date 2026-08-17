@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import Header, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 
 from app.config import settings
 from app.database import get_db
@@ -110,7 +111,6 @@ async def get_current_user(
             first_name=first_name,
             last_name=last_name,
             photo_url=photo_url,
-            points_balance=500,
             role=role
         )
         db.add(user)

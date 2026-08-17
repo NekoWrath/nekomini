@@ -12,9 +12,6 @@ class UserBase(BaseModel):
 
 class UserOut(UserBase):
     role: str
-    points_balance: int = 500
-    twitch_username: Optional[str] = None
-    last_daily_bonus: Optional[datetime.datetime] = None
     notify_stream_start: bool
     notify_announcements: bool
     notify_answers: bool
@@ -140,67 +137,3 @@ class StreamerProfileUpdate(BaseModel):
     discord_url: Optional[str] = None
     donation_url: Optional[str] = None
     donation_title: Optional[str] = None
-
-
-# ==================== Auction / Roulette Schemas ====================
-class AuctionItemCreate(BaseModel):
-    title: str
-    points: int = 1000
-    user_name: Optional[str] = None
-    color: Optional[str] = None
-
-class AuctionItemAddPoints(BaseModel):
-    points: int
-
-class AuctionItemOut(BaseModel):
-    id: int
-    title: str
-    user_name: str
-    points: int
-    color: str
-    is_active: bool
-    chance_percent: float = 0.0
-    created_at: datetime.datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-class AuctionStateOut(BaseModel):
-    items: List[AuctionItemOut]
-    total_points: int
-    active_count: int
-
-
-# ==================== Wallet & Telegram Stars Schemas ====================
-class StarsPackage(BaseModel):
-    id: str
-    stars: int
-    points: int
-    title: str
-    bonus_label: Optional[str] = None
-    badge_color: Optional[str] = None
-
-class CreateStarsInvoiceRequest(BaseModel):
-    package_id: str
-
-class InvoiceLinkResponse(BaseModel):
-    invoice_link: str
-    package: StarsPackage
-
-class LinkTwitchRequest(BaseModel):
-    twitch_username: str
-
-class ClaimTwitchPointsRequest(BaseModel):
-    points: int = 1000
-
-class DailyBonusResponse(BaseModel):
-    success: bool
-    points_credited: int
-    new_balance: int
-    message: str
-
-class WalletStateOut(BaseModel):
-    points_balance: int
-    twitch_username: Optional[str] = None
-    packages: List[StarsPackage]
-    can_claim_daily: bool
-    next_daily_at: Optional[datetime.datetime] = None
