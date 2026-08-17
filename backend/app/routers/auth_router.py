@@ -15,6 +15,8 @@ class AuthMeResponse(BaseModel):
     last_name: Optional[str] = None
     photo_url: Optional[str] = None
     role: str
+    points_balance: int = 500
+    twitch_username: Optional[str] = None
     notify_stream_start: bool
     notify_announcements: bool
     notify_answers: bool
@@ -59,6 +61,8 @@ async def get_me(
         last_name=current_user.last_name,
         photo_url=current_user.photo_url,
         role=current_user.role,
+        points_balance=current_user.points_balance or 0,
+        twitch_username=current_user.twitch_username,
         notify_stream_start=current_user.notify_stream_start,
         notify_announcements=current_user.notify_announcements,
         notify_answers=current_user.notify_answers,

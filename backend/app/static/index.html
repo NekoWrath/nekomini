@@ -330,11 +330,30 @@
         setTimeout(() => setToast(null), 3000);
       };
 
+      // Fast initial hydration from Telegram
+      useEffect(() => {
+        if (isTg && tg.initDataUnsafe?.user) {
+          const u = tg.initDataUnsafe.user;
+          setUser(prev => prev || {
+            telegram_id: u.id,
+            first_name: u.first_name || 'Зритель',
+            last_name: u.last_name,
+            username: u.username,
+            photo_url: u.photo_url,
+            points_balance: 500,
+            role: 'viewer'
+          });
+        }
+      }, [isTg]);
+
       const getHeaders = useCallback(() => {
         const headers = { 'Content-Type': 'application/json' };
         if (isTg && tg.initData) {
           headers['X-Telegram-Init-Data'] = tg.initData;
-        } else {
+        }
+        if (isTg && tg.initDataUnsafe?.user?.id) {
+          headers['X-Mock-User-Id'] = String(tg.initDataUnsafe.user.id);
+        } else if (!isTg) {
           headers['X-Mock-User-Id'] = mockRole === 'admin' ? '123456789' : '987654321';
           headers['X-Mock-Role'] = mockRole;
         }
