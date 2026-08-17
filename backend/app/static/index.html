@@ -476,10 +476,16 @@
             setNewGiveaway({ title: '', description: '', image_url: '', ticket_price: 100, max_tickets_per_user: 10, end_time: getDefaultGiveawayEndTime(3) });
             loadGiveaways();
           } else {
-            showToast(data.detail || 'Ошибка создания розыгрыша', 'error');
+            let errorMsg = 'Ошибка создания розыгрыша';
+            if (typeof data.detail === 'string') {
+              errorMsg = data.detail;
+            } else if (Array.isArray(data.detail)) {
+              errorMsg = data.detail.map(e => e.msg || e.loc?.join('.')).join(', ');
+            }
+            showToast(errorMsg, 'error');
           }
         } catch(e) {
-          showToast('Ошибка создания розыгрыша', 'error');
+          showToast('Ошибка создания розыгрыша: ' + (e.message || ''), 'error');
         }
       };
 
@@ -983,6 +989,228 @@
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SHOP & REWARDS */}
+            {activeTab === 'shop' && (
+              <div className="space-y-4">
+                {/* Points & Wallet Header */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/80 via-slate-900 to-indigo-950/80 border border-purple-500/40 space-y-3 shadow-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-purple-300 font-bold block">Ваш баланс</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-2xl font-extrabold text-white font-display">{(user?.points_balance || 0).toLocaleString('ru-RU')}</span>
+                        <span className="text-sm font-bold text-amber-400">PTS</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleClaimDailyBonus}
+                      disabled={isClaimingBonus || (twitchData && !twitchData.can_claim_daily)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold btn-press flex items-center gap-1.5 shadow-md ${
+                        !twitchData || twitchData.can_claim_daily
+                          ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white hover:brightness-110'
+                          : 'bg-slate-800/80 text-slate-400 border border-white/5 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>🎁</span>
+                      <span>{twitchData && !twitchData.can_claim_daily ? 'Бонус взят' : '+100 PTS'}</span>
+                    </button>
+                  </div>
+
+                  {/* Quick Action Buttons */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/10 text-xs">
+                    <button
+                      onClick={() => setIsTwitchModalOpen(true)}
+                      className="p-2 rounded-xl bg-slate-950/60 hover:bg-slate-900 border border-white/10 text-slate-300 flex items-center justify-center gap-1.5 btn-press"
+                    >
+                      <span>🎟️</span>
+                      <span>Ввести промокод</span>
+                    </button>
+                    <button
+                      onClick={() => setIsTwitchModalOpen(true)}
+                      className="p-2 rounded-xl bg-purple-950/50 hover:bg-purple-900/60 border border-purple-500/30 text-purple-300 flex items-center justify-center gap-1.5 btn-press"
+                    >
+                      <span>📺</span>
+                      <span className="truncate max-w-[110px]">{user?.twitch_username ? `@${user.twitch_username}` : 'Привязать Twitch'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* SECTION 1: 🎁 РОЗЫГРЫШИ (GIVEAWAYS) */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🎁</span>
+                      <h3 className="font-display font-bold text-sm text-white">Розыгрыши и Лотерея</h3>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          setNewGiveaway({
+                            title: '',
+                            description: '',
+                            image_url: '',
+                            ticket_price: 100,
+                            max_tickets_per_user: 10,
+                            end_time: getDefaultGiveawayEndTime(3)
+                          });
+                          setIsGiveawayModalOpen(true);
+                        }}
+                        className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 btn-press"
+                      >
+                        <span>+</span>
+                        <span>Создать</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {giveaways && giveaways.length > 0 ? (
+                    <div className="space-y-3">
+                      {giveaways.map(g => {
+                        const isActive = g.status === 'active';
+                        const userTickets = g.user_tickets_count || 0;
+                        const chance = g.user_win_chance_percent || 0;
+
+                        return (
+                          <div
+                            key={g.id}
+                            className="p-4 rounded-2xl bg-slate-900/90 border border-amber-500/30 space-y-3 relative overflow-hidden shadow-lg"
+                          >
+                            {/* Status Badge */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {g.image_url ? (
+                                  <img src={g.image_url} className="w-12 h-12 rounded-xl object-cover border border-amber-500/30 flex-shrink-0" alt="Prize" />
+                                ) : (
+                                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-xl flex-shrink-0">
+                                    🎁
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <h4 className="font-bold text-white text-xs sm:text-sm truncate">{g.title}</h4>
+                                  <div className="text-[10px] text-slate-400">
+                                    {isActive ? (
+                                      <span className="text-amber-300">
+                                        ⏳ До {new Date(g.end_time).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    ) : (
+                                      <span className="text-emerald-400">Завершен</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex-shrink-0 ${
+                                isActive ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              }`}>
+                                {isActive ? 'Раздача' : 'Итоги'}
+                              </span>
+                            </div>
+
+                            {g.description && (
+                              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/50 p-2.5 rounded-xl border border-white/5">
+                                {g.description}
+                              </p>
+                            )}
+
+                            {/* Stats & User Chance */}
+                            <div className="grid grid-cols-2 gap-2 bg-slate-950/70 p-2.5 rounded-xl border border-white/5 text-xs">
+                              <div>
+                                <div className="text-[10px] text-slate-400">Цена билета</div>
+                                <div className="font-bold text-amber-300">{g.ticket_price} PTS</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-400">Банк билетов</div>
+                                <div className="font-bold text-white">{g.total_tickets} шт.</div>
+                              </div>
+                              <div className="col-span-2 pt-1 border-t border-white/5 flex items-center justify-between text-[11px]">
+                                <span className="text-slate-300">Ваши билеты: <strong className="text-white">{userTickets} шт.</strong></span>
+                                <span className="text-emerald-400 font-bold">Шанс: {chance}%</span>
+                              </div>
+                            </div>
+
+                            {/* Winner Card */}
+                            {!isActive && g.winner_name && (
+                              <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">👑</span>
+                                  <div>
+                                    <div className="font-bold text-white">Победитель: {g.winner_name}</div>
+                                    {g.winning_ticket_number && <div className="text-[10px] text-emerald-400">Выигрышный билет #{g.winning_ticket_number}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Action button */}
+                            {isActive && (
+                              <button
+                                onClick={() => setBuyTicketsModal({ isOpen: true, giveaway: g, count: 1 })}
+                                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 hover:brightness-110 text-white font-bold text-xs shadow-lg btn-press flex items-center justify-center gap-1.5"
+                              >
+                                <span>🎟️</span>
+                                <span>Купить билет ({g.ticket_price} PTS)</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-6 rounded-2xl glass-panel text-center space-y-2">
+                      <div className="text-3xl">🎁</div>
+                      <div className="text-xs font-bold text-slate-200">Сейчас нет активных розыгрышей</div>
+                      <p className="text-[11px] text-slate-400">Копите баллы и следите за стримами — скоро будет новый розыгрыш!</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 2: 🎡 КОЛЕСО ФОРТУНЫ */}
+                <div
+                  onClick={() => showToast('🎡 Колесо Фортуны в разработке! Скоро вы сможете крутить рулетку за баллы прямо во время стримов.', 'info')}
+                  className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/70 via-indigo-950/70 to-slate-900 border border-purple-500/30 relative overflow-hidden shadow-lg cursor-pointer hover:border-purple-400/50 transition-all btn-press"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-purple-600/30 border border-purple-400/40 flex items-center justify-center text-2xl flex-shrink-0">
+                        🎡
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white text-sm">Колесо Фортуны</h4>
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">В разработке ⏳</span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5">Крутите рулетку за 250 PTS и выбивайте секретные призы и множители на стриме!</p>
+                      </div>
+                    </div>
+                    <span className="text-purple-400 text-lg flex-shrink-0">➔</span>
+                  </div>
+                </div>
+
+                {/* SECTION 3: ⚡ БУСТ СТРИМЕРА & VIP */}
+                <div
+                  onClick={() => showToast('⚡ Бусты и VIP-привилегии в разработке! Скоро будет доступен буст на стриме, множители баллов и эксклюзивные бейджи.', 'info')}
+                  className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/70 via-rose-950/70 to-slate-900 border border-amber-500/30 relative overflow-hidden shadow-lg cursor-pointer hover:border-amber-400/50 transition-all btn-press"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-600/30 border border-amber-400/40 flex items-center justify-center text-2xl flex-shrink-0">
+                        ⚡
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-white text-sm">Буст Стримера & VIP</h4>
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">В разработке ⏳</span>
+                        </div>
+                        <p className="text-[11px] text-slate-300 mt-0.5">Включайте множитель x2 PTS, выделяйтесь в предложке и получайте VIP-статус!</p>
+                      </div>
+                    </div>
+                    <span className="text-amber-400 text-lg flex-shrink-0">➔</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1597,9 +1825,10 @@
           {/* BOTTOM NAV */}
           <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto glass-nav border-t border-white/10 p-2 flex justify-around z-40">
             {[
-              { id: 'schedule', l: 'Расписание', icon: '📅' },
+              { id: 'schedule', l: 'Стримы', icon: '📅' },
+              { id: 'shop', l: 'Магазин', icon: '🛒' },
               { id: 'suggestions', l: 'Предложка', icon: '💡' },
-              { id: 'settings', l: 'Настройки', icon: '🔔' },
+              { id: 'settings', l: 'Профиль', icon: '👤' },
               ...(isAdmin ? [{ id: 'admin', l: 'Админка', icon: '🛡️' }] : []),
             ].map(t => (
               <button
@@ -2351,7 +2580,8 @@
                         type="number"
                         min="1"
                         value={newGiveaway.ticket_price}
-                        onChange={(e) => setNewGiveaway(p => ({ ...p, ticket_price: parseInt(e.target.value) || 100 }))}
+                        onChange={(e) => setNewGiveaway(p => ({ ...p, ticket_price: e.target.value }))}
+                        placeholder="100"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold"
                         required
                       />
@@ -2363,7 +2593,7 @@
                         type="number"
                         min="0"
                         value={newGiveaway.max_tickets_per_user}
-                        onChange={(e) => setNewGiveaway(p => ({ ...p, max_tickets_per_user: parseInt(e.target.value) || 0 }))}
+                        onChange={(e) => setNewGiveaway(p => ({ ...p, max_tickets_per_user: e.target.value }))}
                         placeholder="0 = без лимита"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white"
                       />

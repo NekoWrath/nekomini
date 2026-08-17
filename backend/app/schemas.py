@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel, ConfigDict
 
 # ==================== User Schemas ====================
@@ -148,16 +148,21 @@ class GiveawayBase(BaseModel):
     max_tickets_per_user: Optional[int] = 10
     end_time: datetime.datetime
 
-class GiveawayCreate(GiveawayBase):
-    pass
+class GiveawayCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    image_url: Optional[str] = None
+    ticket_price: Optional[Union[int, str]] = 100
+    max_tickets_per_user: Optional[Union[int, str]] = 10
+    end_time: Optional[Union[datetime.datetime, str]] = None
 
 class GiveawayUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
-    ticket_price: Optional[int] = None
-    max_tickets_per_user: Optional[int] = None
-    end_time: Optional[datetime.datetime] = None
+    ticket_price: Optional[Union[int, str]] = None
+    max_tickets_per_user: Optional[Union[int, str]] = None
+    end_time: Optional[Union[datetime.datetime, str]] = None
     status: Optional[str] = None
 
 class GiveawayOut(GiveawayBase):

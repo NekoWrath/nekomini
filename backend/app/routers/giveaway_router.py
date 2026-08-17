@@ -207,7 +207,38 @@ async def create_giveaway(
     db: AsyncSession = Depends(get_db)
 ):
     """Creates a new giveaway."""
-    end_time_val = req.end_time
+    # 1. Parse ticket price
+    try:
+        t_price = max(1, int(req.ticket_price)) if req.ticket_price is not None else 100
+    except Exception:
+        t_price = 100
+
+    # 2. Parse max tickets per user
+    try:
+        m_tickets = int(req.max_tickets_per_user) if (req.max_tickets_per_user is not None and str(req.max_tickets_per_user).strip() != "") else None
+        if m_tickets is not None and m_tickets <= 0:
+            m_tickets = None
+    except Exception:
+        m_tickets = None
+
+    # 3. Parse end time
+    end_time_val = None
+    if req.end_time:
+        if isinstance(req.end_time, datetime.datetime):
+            end_time_val = req.end_time
+        elif isinstance(req.end_time, str) and req.end_time.strip():
+            try:
+                clean_str = req.end_time.strip().replace("Z", "+00:00")
+                end_time_val = datetime.datetime.fromisoformat(clean_str)
+            except Exception:
+                try:
+                    end_time_val = datetime.datetime.strptime(req.end_time[:16], "%Y-%m-%dT%H:%M")
+                except Exception:
+                    end_time_val = datetime.datetime.utcnow() + datetime.timedelta(days=3)
+
+    if not end_time_val:
+        end_time_val = datetime.datetime.utcnow() + datetime.timedelta(days=3)
+
     if hasattr(end_time_val, "tzinfo") and end_time_val.tzinfo is not None:
         end_time_val = end_time_val.replace(tzinfo=None)
 
@@ -215,8 +246,8 @@ async def create_giveaway(
         title=req.title.strip(),
         description=req.description or "",
         image_url=req.image_url,
-        ticket_price=max(1, req.ticket_price),
-        max_tickets_per_user=req.max_tickets_per_user if (req.max_tickets_per_user and req.max_tickets_per_user > 0) else None,
+        ticket_price=t_price,
+        max_tickets_per_user=m_tickets,
         end_time=end_time_val,
         status="active",
         total_tickets=0
@@ -265,14 +296,33 @@ async def update_giveaway(
     if req.image_url is not None:
         g.image_url = req.image_url
     if req.ticket_price is not None:
-        g.ticket_price = max(1, req.ticket_price)
+        try:
+            g.ticket_price = max(1, int(req.ticket_price))
+        except Exception:
+            pass
     if req.max_tickets_per_user is not None:
-        g.max_tickets_per_user = req.max_tickets_per_user if req.max_tickets_per_user > 0 else None
+        try:
+            m = int(req.max_tickets_per_user)
+            g.max_tickets_per_user = m if m > 0 else None
+        except Exception:
+            pass
     if req.end_time is not None:
-        end_time_val = req.end_time
-        if hasattr(end_time_val, "tzinfo") and end_time_val.tzinfo is not None:
-            end_time_val = end_time_val.replace(tzinfo=None)
-        g.end_time = end_time_val
+        end_time_val = None
+        if isinstance(req.end_time, datetime.datetime):
+            end_time_val = req.end_time
+        elif isinstance(req.end_time, str) and req.end_time.strip():
+            try:
+                clean_str = req.end_time.strip().replace("Z", "+00:00")
+                end_time_val = datetime.datetime.fromisoformat(clean_str)
+            except Exception:
+                try:
+                    end_time_val = datetime.datetime.strptime(req.end_time[:16], "%Y-%m-%dT%H:%M")
+                except Exception:
+                    pass
+        if end_time_val:
+            if hasattr(end_time_val, "tzinfo") and end_time_val.tzinfo is not None:
+                end_time_val = end_time_val.replace(tzinfo=None)
+            g.end_time = end_time_val
     if req.status is not None:
         g.status = req.status
 
