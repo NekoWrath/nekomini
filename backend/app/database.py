@@ -1,24 +1,38 @@
+import re
+import logging
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from app.config import settings
 
-def get_async_db_url(url: str) -> str:
-    if not url:
-        return "sqlite+aiosqlite:///./tma_streamer.db"
-    url = url.strip().strip("'").strip('"')
+logger = logging.getLogger(__name__)
+
+def prepare_async_db(raw_url: str):
+    if not raw_url or "sqlite" in raw_url:
+        return "sqlite+aiosqlite:///./tma_streamer.db", {"check_same_thread": False}
+
+    url = raw_url.strip().strip("'").strip('"')
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
 
-db_url = get_async_db_url(settings.DATABASE_URL)
+    connect_args = {}
+    if "postgresql+asyncpg" in url:
+        connect_args["ssl"] = "require"
+        if "?sslmode=" in url or "&sslmode=" in url:
+            url = re.sub(r'[?&]sslmode=[^&]+', '', url)
+            if '?' not in url and '&' in url:
+                url = url.replace('&', '?', 1)
+
+    return url, connect_args
+
+db_url, db_connect_args = prepare_async_db(settings.DATABASE_URL)
 
 engine = create_async_engine(
     db_url,
     echo=False,
     pool_pre_ping=True,
-    connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
+    connect_args=db_connect_args
 )
 
 AsyncSessionLocal = async_sessionmaker(

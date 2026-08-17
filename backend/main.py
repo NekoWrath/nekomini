@@ -143,6 +143,33 @@ else:
             "docs_url": "/docs"
         }
 
+from sqlalchemy import text
+
+@app.get("/api/health")
+async def health_check():
+    """Health check and live database diagnostic endpoint."""
+    db_status = "unknown"
+    db_type = "postgresql" if "postgresql" in str(engine.url) else "sqlite"
+    error = None
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = "error"
+        error = str(e)
+
+    return {
+        "status": "ok",
+        "database": {
+            "type": db_type,
+            "status": db_status,
+            "error": error
+        },
+        "bot_configured": bool(settings.BOT_TOKEN and ":" in settings.BOT_TOKEN and settings.BOT_TOKEN != "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"),
+        "admin_ids_count": len(settings.admin_ids)
+    }
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
